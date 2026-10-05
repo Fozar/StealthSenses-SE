@@ -50,8 +50,9 @@ namespace StealthSenses::Config {
         float       min_visibility   = 0.2f;    // clear footprint: read from lead_distance / across gaps
         float       faint_visibility = 0.1f;    // faint footprint (stone 0.15): read only up close
         float       close_read_radius = 300.0f; // "up close" for faint footprints
-        int         caution_level    = 40;      // stealth meter value 0..100 that counts as "suspicious"
-        bool        require_hostile  = false;
+        int         caution_level    = 70;      // stealth meter 0..100 that counts as "suspicious" (baseline near the player is 41-67)
+        float       after_combat_seconds = 60.0f; // a hostile that fought the player stays suspicious this long after
+        bool        require_hostile  = true;
         bool        include_combat   = false;
         int         max_trackers     = 4;
         STEALTHSENSES_DEV_SETTING(bool, debug_all_npcs, false, "every High-process NPC tracks (AI obedience test)")

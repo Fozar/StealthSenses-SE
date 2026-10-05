@@ -36,8 +36,9 @@
         "min_visibility": 0.2,
         "faint_visibility": 0.1,
         "close_read_radius": 300.0,
-        "caution_level": 40,
-        "require_hostile": false,
+        "caution_level": 70,
+        "after_combat_seconds": 60.0,
+        "require_hostile": true,
         "include_combat": false,
         "max_trackers": 4
     },

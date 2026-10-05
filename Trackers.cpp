@@ -85,6 +85,9 @@ namespace StealthSenses::Trackers {
 
         std::unordered_map<RE::FormID, State>  g_trackers;
         std::unordered_map<RE::FormID, Memory> g_memory;
+        // Hostile NPCs that were in combat recently (seconds left): once the fight ends without
+        // the player found, the NPC stays suspicious and takes up a trail it comes across
+        std::unordered_map<RE::FormID, float>  g_recentCombat;
         std::vector<Binding>                   g_stale;
 
         // RequestDetectionLevel returns < 0 while the target is undetected; MaxsuDetectionMeter
@@ -413,6 +416,7 @@ namespace StealthSenses::Trackers {
         for (auto& [id, memory] : g_memory) {
             memory.cooldown = std::max(memory.cooldown - a_deltaSeconds, 0.0f);
         }
+        std::erase_if(g_recentCombat, [&](auto& a_entry) { return (a_entry.second -= a_deltaSeconds) <= 0.0f; });
 
         if (Telemetry::Enabled()) {
             Telemetry::Write({ { "type", "player" }, { "pos", Telemetry::Vec(player->GetPosition()) },
@@ -442,7 +446,7 @@ namespace StealthSenses::Trackers {
                 const auto*    state   = a_actor->AsActorState();
                 nlohmann::json npc{ { "type", "npc" }, { "id", Telemetry::Hex(id) }, { "name", a_actor->GetName() },
                     { "pos", Telemetry::Vec(a_actor->GetPosition()) }, { "meter", meter }, { "alert", alerted },
-                    { "combat", combat }, { "hostile", hostile },
+                    { "combat", combat }, { "hostile", hostile }, { "afterFight", g_recentCombat.contains(id) },
                     { "sitsleep", state ? static_cast<int>(state->GetSitSleepState()) : -1 },
                     { "weapon", state && state->IsWeaponDrawn() },
                     { "pkg", Telemetry::Hex(package ? package->GetFormID() : 0) } };
@@ -455,6 +459,9 @@ namespace StealthSenses::Trackers {
                 Telemetry::Write(std::move(npc));
             }
 
+            if (combat && hostile && a_actor->GetActorRuntimeData().currentCombatTarget.get().get() == player) {
+                g_recentCombat[id] = cfg.after_combat_seconds;
+            }
             if (combat && !cfg.include_combat) {
                 if (tracked != g_trackers.end()) {
                     Drop(a_actor, tracked->second, "entered combat");
@@ -479,7 +486,12 @@ namespace StealthSenses::Trackers {
             const auto pos = a_actor->GetPosition();
 
             if (tracked == g_trackers.end()) {
-                const bool suspicious = cfg.debug_all_npcs || alerted || meter >= cfg.caution_level;
+                // Why it would look for a trail at all. The stealth meter alone is a poor signal: any
+                // hostile within ~2000 units sits at 41+ and within 500 at 59-67 with nothing going on
+                // (tests 0.5.x), so caution_level is set above that; losing the player in a fight is
+                // the strong trigger
+                const bool afterFight = g_recentCombat.contains(id);
+                const bool suspicious = cfg.debug_all_npcs || alerted || afterFight || meter >= cfg.caution_level;
                 if (!suspicious || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
                     return RE::BSContainer::ForEachResult::kContinue;
                 }
@@ -519,7 +531,7 @@ namespace StealthSenses::Trackers {
                         { "inView", viewCount }, { "sitsleep", static_cast<int>(sitSleep) }, { "picked", best != nullptr } });
                 }
                 if (best) {
-                    Note(std::format("{} noticed footprint #{} (meter {}, alert {})", Describe(a_actor), best->seq, meter, alerted));
+                    Note(std::format("{} noticed footprint #{} (meter {}, alert {}, after fight {})", Describe(a_actor), best->seq, meter, alerted, afterFight));
                     State state;
                     if (Steer(player, a_actor, state, *best)) {
                         g_trackers.emplace(id, std::move(state));
@@ -698,6 +710,7 @@ namespace StealthSenses::Trackers {
     void Clear() {
         g_trackers.clear();
         g_memory.clear();
+        g_recentCombat.clear();
     }
 
     std::vector<Binding> Bindings() {

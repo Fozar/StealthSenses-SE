@@ -87,6 +87,7 @@ namespace StealthSenses::Config {
         Read(jk, "faint_visibility", k.faint_visibility);
         Read(jk, "close_read_radius", k.close_read_radius);
         Read(jk, "caution_level", k.caution_level);
+        Read(jk, "after_combat_seconds", k.after_combat_seconds);
         Read(jk, "require_hostile", k.require_hostile);
         Read(jk, "include_combat", k.include_combat);
         Read(jk, "max_trackers", k.max_trackers);

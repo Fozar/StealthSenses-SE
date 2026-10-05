@@ -40,12 +40,14 @@ const track = DATA.bandit.filter(b => b.mode);
 const tStart = track[0].t, tEnd = track[track.length - 1].t;
 // Frame: the tracker's route plus the footprints around it
 const near = (f) => track.some(b => Math.hypot(b.x - f.x, b.y - f.y) < 1600);
-const fps = DATA.footprints.filter(near).sort((a, b) => a.seq - b.seq);
+// Footprints near the tracker's route, plus every print the player left during the chase
+// (the player kept moving away while the bandit read the older trail)
+const fps = DATA.footprints.filter(f => near(f) || (f.t >= tStart - 10 && f.t <= tEnd)).sort((a, b) => a.seq - b.seq);
 const meEnd = DATA.player.reduce((best, p) => Math.abs(p.t - tEnd) < Math.abs(best.t - tEnd) ? p : best, DATA.player[0]);
 const pts = [...track, ...fps, meEnd];
 const minX = Math.min(...pts.map(p => p.x)), maxX = Math.max(...pts.map(p => p.x));
 const minY = Math.min(...pts.map(p => p.y)), maxY = Math.max(...pts.map(p => p.y));
-const box = { x: 640, y: 130, w: 1200, h: 880 };
+const box = { x: 620, y: 120, w: 1240, h: 860 };
 const scale = Math.min(box.w / (maxX - minX), box.h / (maxY - minY));
 const offX = box.x + (box.w - (maxX - minX) * scale) / 2, offY = box.y + (box.h - (maxY - minY) * scale) / 2;
 const P = (p) => [offX + (p.x - minX) * scale, offY + (maxY - p.y) * scale];   // north up
@@ -63,7 +65,7 @@ fps.forEach((f, i) => {
   const soft = SOFT.has(f.mat), unknown = f.mat === '00000000';
   const color = soft ? '#e6c995' : unknown ? '#b9c3d3' : '#8a93a3';
   const seqs = track.map(b => b.seq).filter(Boolean); const lo = Math.min(...seqs) - 25, hi = Math.max(...seqs) + 120;
-  const mine = f.seq >= lo && f.seq <= hi;
+  const mine = (f.seq >= lo && f.seq <= hi) || (f.t >= tStart - 10 && f.t <= tEnd);
   const op = (soft ? 0.95 : unknown ? 0.6 : 0.4) * (mine ? 1 : 0.22);
   const g = el('g', { transform: `translate(${(x + nx / nl * 4 * side).toFixed(1)} ${(y + ny / nl * 4 * side).toFixed(1)}) rotate(${ang.toFixed(1)}) scale(${side < 0 ? -1 : 1} 1)` }, footG);
   el('use', { href: '#boot', x: -4.5, y: -11, width: 9, height: 22, fill: color, 'fill-opacity': op }, g);
@@ -138,5 +140,6 @@ el('path', { d: 'M 1840 70 L 1830 100 L 1840 94 L 1850 100 Z', fill: '#aab4c4' }
 el('text', { x: 1840, y: 62, 'text-anchor': 'middle', class: 'ui', 'font-size': 16, fill: '#aab4c4' }, ui, 'N');
 </script>
 </body></html>
+
 
 

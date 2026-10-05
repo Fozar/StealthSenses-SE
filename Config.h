@@ -31,6 +31,7 @@ namespace StealthSenses::Config {
         bool        enabled          = true;
         int         interval_ms      = 1000;
         float       notice_radius    = 350.0f;  // an NPC notices a footprint only this close
+        float       notice_fov       = 120.0f;  // ...and within this view cone (degrees, full width)
         float       lead_distance    = 900.0f;  // next footprint must be this close to the NPC
         float       gap_distance     = 1200.0f; // look this far past the last point when the trail breaks
         float       arrive_radius    = 300.0f;  // travel packages stop ~260-280 short of the marker

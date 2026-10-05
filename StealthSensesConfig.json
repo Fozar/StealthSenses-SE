@@ -17,6 +17,7 @@
         "enabled": true,
         "interval_ms": 1000,
         "notice_radius": 350.0,
+        "notice_fov": 120.0,
         "lead_distance": 900.0,
         "gap_distance": 1200.0,
         "arrive_radius": 300.0,

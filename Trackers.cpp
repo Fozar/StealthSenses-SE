@@ -489,14 +489,34 @@ namespace StealthSenses::Trackers {
                 }
                 const auto skipSeq = memory != g_memory.end() ? memory->second.lastSeq : 0;
 
-                // Notices only a footprint right next to it; follows the freshest one around
-                const Trail::Footprint* best = nullptr;
+                // Sitting, sleeping or on the way into/out of furniture: not looking at the ground
+                const auto* actorState = a_actor->AsActorState();
+                const auto  sitSleep   = actorState ? actorState->GetSitSleepState() : RE::SIT_SLEEP_STATE::kNormal;
+                const bool  idleBody   = sitSleep != RE::SIT_SLEEP_STATE::kNormal;
+
+                // Notices only a footprint right next to it and in front of it (GetHeadingAngle:
+                // degrees between where the NPC faces and the point [CL]); takes the freshest one
+                const Trail::Footprint* best   = nullptr;
+                int                     nearCount = 0;
+                int                     viewCount = 0;
                 for (const auto& c : candidates) {
                     const auto* fp = c.fp;
-                    if (fp->seq > skipSeq && pos.GetDistance(fp->pos) <= cfg.notice_radius && readableFrom(c, pos) &&
-                        (!best || fp->seq > best->seq)) {
+                    if (fp->seq <= skipSeq || pos.GetDistance(fp->pos) > cfg.notice_radius || !readableFrom(c, pos)) {
+                        continue;
+                    }
+                    ++nearCount;
+                    if (a_actor->GetHeadingAngle(fp->pos, true) > cfg.notice_fov * 0.5f) {
+                        continue;
+                    }
+                    ++viewCount;
+                    if (!idleBody && (!best || fp->seq > best->seq)) {
                         best = fp;
                     }
+                }
+                if (nearCount > 0) {
+                    // Why a footprint next to an NPC was or was not noticed
+                    Telemetry::Write({ { "type", "notice" }, { "id", Telemetry::Hex(id) }, { "near", nearCount },
+                        { "inView", viewCount }, { "sitsleep", static_cast<int>(sitSleep) }, { "picked", best != nullptr } });
                 }
                 if (best) {
                     Note(std::format("{} noticed footprint #{} (meter {}, alert {})", Describe(a_actor), best->seq, meter, alerted));

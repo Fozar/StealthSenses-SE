@@ -20,6 +20,7 @@ namespace StealthSenses::Trackers {
         RE::TESPackage*    g_package = nullptr;
         RE::BGSKeyword*    g_keyword = nullptr;
         RE::TESBoundObject* g_xmarker = nullptr;
+        bool               g_ready   = false;
 
         struct State {
             std::uint32_t                 lastSeq   = 0;
@@ -104,12 +105,13 @@ namespace StealthSenses::Trackers {
         }
 
         // Sends the NPC to the footprint: marker on the footprint, NPC linked to it, travel package.
-        void Steer(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state, const Trail::Footprint& a_fp) {
+        // False if the marker could not be placed; the caller must not keep the state then.
+        bool Steer(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state, const Trail::Footprint& a_fp) {
             if (!a_state.marker) {
                 a_state.marker = a_player->PlaceObjectAtMe(g_xmarker, false);
                 if (!a_state.marker) {
                     SKSE::log::error("{}: PlaceObjectAtMe(XMarker) failed", Describe(a_actor));
-                    return;
+                    return false;
                 }
                 const auto* prev   = a_actor->extraList.GetLinkedRef(g_keyword);
                 a_state.prevLinked = prev ? prev->GetFormID() : 0;
@@ -133,6 +135,7 @@ namespace StealthSenses::Trackers {
                 Describe(a_actor), first ? "picked up trail at" : "follows to", a_fp.seq,
                 a_actor->GetPosition().GetDistance(a_fp.pos), current ? current->GetFormID() : 0,
                 current == g_package ? "" : " (not ours!)"));
+            return true;
         }
     }
 
@@ -144,11 +147,16 @@ namespace StealthSenses::Trackers {
         const bool run = Config::Get().tracker.package_style == "run";
         g_package      = data->LookupForm<RE::TESPackage>(run ? kRunPackage : kWalkPackage, "Skyrim.esm");
         g_keyword      = data->LookupForm<RE::BGSKeyword>(run ? kRunKeyword : kWalkKeyword, "Skyrim.esm");
-        g_xmarker      = data->LookupForm<RE::TESBoundObject>(kXMarker, "Skyrim.esm");
+        // 0x3B is a hardcoded engine form below 0x800: LookupForm(…, "Skyrim.esm") returns
+        // null for it (in-game test 0.2.0), the global lookup finds it
+        if (auto* form = RE::TESForm::LookupByID(kXMarker)) {
+            g_xmarker = form->As<RE::TESBoundObject>();
+        }
         SKSE::log::info("Trackers: package {:08X} keyword {:08X} xmarker {:08X}",
             g_package ? g_package->GetFormID() : 0, g_keyword ? g_keyword->GetFormID() : 0,
             g_xmarker ? g_xmarker->GetFormID() : 0);
-        return g_package && g_keyword && g_xmarker;
+        g_ready = g_package && g_keyword && g_xmarker;
+        return g_ready;
     }
 
     void Update(float a_deltaSeconds) {
@@ -157,7 +165,7 @@ namespace StealthSenses::Trackers {
         auto* processes = RE::ProcessLists::GetSingleton();
         auto* calendar  = RE::Calendar::GetSingleton();
         auto* sky       = RE::Sky::GetSingleton();
-        if (!cfg.enabled || !player || !processes || !calendar || !g_package) {
+        if (!cfg.enabled || !g_ready || !player || !processes || !calendar) {
             return;
         }
 
@@ -241,7 +249,10 @@ namespace StealthSenses::Trackers {
                 }
                 if (best) {
                     SKSE::log::info("{} noticed footprint #{} (meter {}, alert {})", Describe(a_actor), best->seq, meter, alerted);
-                    Steer(player, a_actor, g_trackers[id], *best);
+                    State state;
+                    if (Steer(player, a_actor, state, *best)) {
+                        g_trackers.emplace(id, std::move(state));
+                    }
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
             }

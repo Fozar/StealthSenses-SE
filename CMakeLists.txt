@@ -118,3 +118,16 @@ add_custom_command(TARGET StealthSenses POST_BUILD
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/_package"
     COMMENT "Packaging StealthSenses.zip"
 )
+
+# Dev deploy: copy the DLL into a mod manager folder after each build,
+# e.g. -DSTEALTHSENSES_DEPLOY_DIR=D:/Modding/MO2/mods/StealthSenses/SKSE/Plugins.
+# The config is not copied: the deployed one holds test settings.
+set(STEALTHSENSES_DEPLOY_DIR "" CACHE PATH "Copy the built DLL here after each build (empty = off)")
+if(STEALTHSENSES_DEPLOY_DIR)
+    add_custom_command(TARGET StealthSenses POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${STEALTHSENSES_DEPLOY_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:StealthSenses>" "${STEALTHSENSES_DEPLOY_DIR}"
+        COMMENT "Deploying StealthSenses.dll to ${STEALTHSENSES_DEPLOY_DIR}"
+    )
+endif()

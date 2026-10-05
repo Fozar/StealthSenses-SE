@@ -68,6 +68,7 @@ namespace StealthSenses::Config {
         Read(jk, "interval_ms", k.interval_ms);
         Read(jk, "notice_radius", k.notice_radius);
         Read(jk, "lead_distance", k.lead_distance);
+        Read(jk, "gap_distance", k.gap_distance);
         Read(jk, "arrive_radius", k.arrive_radius);
         Read(jk, "retarget_seconds", k.retarget_seconds);
         Read(jk, "lost_seconds", k.lost_seconds);

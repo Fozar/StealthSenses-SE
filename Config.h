@@ -21,7 +21,8 @@ namespace StealthSenses::Config {
         int         interval_ms      = 1000;
         float       notice_radius    = 350.0f;  // an NPC notices a footprint only this close
         float       lead_distance    = 900.0f;  // next footprint must be this close to the NPC
-        float       arrive_radius    = 160.0f;
+        float       gap_distance     = 1200.0f; // look this far past the last point when the trail breaks
+        float       arrive_radius    = 300.0f;  // travel packages stop ~260-280 short of the marker
         float       retarget_seconds = 12.0f;   // give the next point even if the NPC never arrived
         float       lost_seconds     = 30.0f;   // drop the tracker after this long without a new point
         float       repickup_seconds = 15.0f;   // cooldown after a tracker is dropped

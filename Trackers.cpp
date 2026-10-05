@@ -264,10 +264,15 @@ namespace StealthSenses::Trackers {
             const float toTarget = pos.GetDistance(state.target);
             SKSE::log::trace("{} -> #{}: {:.0f} away after {:.1f}s, package {:08X}",
                 Describe(a_actor), state.lastSeq, toTarget, state.sinceStep, current ? current->GetFormID() : 0);
-            if (current != g_package && !state.packageLost) {
-                state.packageLost = true;
-                SKSE::log::info("{} package replaced by {:08X} after {:.1f}s",
-                    Describe(a_actor), current ? current->GetFormID() : 0, state.sinceStep);
+            if (current != g_package) {
+                // Another package won the evaluation (seen in test 0.2.1: dynamic FF… packages
+                // and the NPC's own patrol). Put ours back; log only the first time per point.
+                if (!state.packageLost) {
+                    state.packageLost = true;
+                    SKSE::log::info("{} package replaced by {:08X} after {:.1f}s, reapplying",
+                        Describe(a_actor), current ? current->GetFormID() : 0, state.sinceStep);
+                }
+                a_actor->PutCreatedPackage(g_package, true, false, true);
             }
 
             if (!state.arrived && toTarget <= cfg.arrive_radius) {
@@ -286,7 +291,23 @@ namespace StealthSenses::Trackers {
                     next = fp;
                 }
             }
+            // Nothing ahead in sight (e.g. the trail crossed stone): the first readable footprint
+            // after the gap, measured from the last point, as a tracker casting around would find it
+            bool gap = false;
+            if (!next) {
+                for (const auto* fp : readable) {
+                    if (fp->seq > state.lastSeq && state.target.GetDistance(fp->pos) <= cfg.gap_distance &&
+                        (!next || fp->seq < next->seq)) {
+                        next = fp;
+                        gap  = true;
+                    }
+                }
+            }
             if (next) {
+                if (gap) {
+                    SKSE::log::info("{} picks the trail up again after a gap: #{} -> #{}",
+                        Describe(a_actor), state.lastSeq, next->seq);
+                }
                 if (!state.arrived) {
                     SKSE::log::info("{} did not reach #{} in {:.1f}s (still {:.0f} away)",
                         Describe(a_actor), state.lastSeq, state.sinceStep, toTarget);

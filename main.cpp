@@ -204,7 +204,8 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     InitializeLogging();
     const auto* plugin = SKSE::PluginDeclaration::GetSingleton();
     const auto& ver    = plugin->GetVersion();
-    SKSE::log::info("StealthSenses {}.{}.{} — plugin loaded", ver.major(), ver.minor(), ver.patch());
+    SKSE::log::info("StealthSenses {}.{}.{} ({} build) — plugin loaded", ver.major(), ver.minor(), ver.patch(),
+        kDevBuild ? "dev" : "release");
 
     Config::Load();
     ApplyLogLevel();

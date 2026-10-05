@@ -66,6 +66,7 @@ namespace StealthSenses::Trackers {
             float                            examineCooldown = 0.0f;
             int                              hops       = 0;
             bool                             arrived    = false;
+            bool                             alertSet   = false; // we put it into alert; undo on a calm drop
             RE::NiPoint3                     lastPos;           // NPC position last tick
             float                            stillTime  = 0.0f; // standing still while it should walk
             float                            stuckTotal = 0.0f; // all such time since the last footprint
@@ -157,10 +158,17 @@ namespace StealthSenses::Trackers {
             }
         }
 
+        bool SetAlert(RE::Actor* a_actor, bool a_alert);
+
         void Drop(RE::Actor* a_actor, State& a_state, std::string_view a_why) {
             Say(std::format("{} {} after #{}, stops tracking", Describe(a_actor), a_why, a_state.lastSeq));
             Remember(a_actor->GetFormID(), a_state.lastSeq);
             Release(a_actor, a_state.marker.get(), a_state.prevLinked);
+            // Gave up calmly: back to normal (vanilla may say an alert-to-normal line). In combat or
+            // after spotting the player the alert belongs to vanilla now.
+            if (a_state.alertSet && !a_actor->IsInCombat()) {
+                SetAlert(a_actor, false);
+            }
         }
 
         RE::TESPackage* PackageFor(Mode a_mode) {
@@ -189,6 +197,25 @@ namespace StealthSenses::Trackers {
             const bool accepted = a_actor->NotifyAnimationGraph(a_event);
             Telemetry::Write({ { "type", "idle" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
                 { "event", a_event }, { "played", accepted } });
+        }
+
+        // Papyrus Actor.SetAlert through the VM: vanilla alerted NPCs carry their weapon ready and
+        // voice the alert lines ("Who's there?" — dialogue subtypes ALIL/NOTA/ALTN in Skyrim.esm)
+        // on their own. The engine function behind it has no CommonLib wrapper (AL names only:
+        // Actor::SetIsAlerted 36281/37270, matched by name), so the call goes through the script
+        // VM — whether the lines really play is what the in-game test checks [assumption].
+        bool SetAlert(RE::Actor* a_actor, bool a_alert) {
+            auto* vm     = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+            auto* policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
+            if (!policy) {
+                return false;
+            }
+            const auto handle = policy->GetHandleForObject(RE::Actor::FORMTYPE, a_actor);
+            if (handle == policy->EmptyHandle()) {
+                return false;
+            }
+            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+            return vm->DispatchMethodCall(handle, "Actor", "SetAlert", RE::MakeFunctionArguments(std::move(a_alert)), callback);
         }
 
         // Closest navmesh point, so search points do not land inside rocks and walls.
@@ -232,8 +259,14 @@ namespace StealthSenses::Trackers {
                 a_state.humanoid = g_humanoid && a_actor->HasKeyword(g_humanoid);
 
                 // A hunter with a weapon in hand reads as "tracking someone" at a glance
-                if (Config::Get().tracker.draw_weapon && a_state.humanoid && a_actor->IsHostileToActor(a_player)) {
+                const bool hostile = a_actor->IsHostileToActor(a_player);
+                if (Config::Get().tracker.draw_weapon && a_state.humanoid && hostile) {
                     a_actor->DrawWeaponMagicHands(true);
+                }
+                if (Config::Get().tracker.set_alert && a_state.humanoid && hostile) {
+                    a_state.alertSet = SetAlert(a_actor, true);
+                    Telemetry::Write({ { "type", "alert" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
+                        { "dispatched", a_state.alertSet } });
                 }
             }
 

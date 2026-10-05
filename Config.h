@@ -1,5 +1,16 @@
 #pragma once
 
+// Dev build (CMake STEALTHSENSES_DEV=ON, preset "dev"): test switches that must not ship.
+// In a release build each dev-only setting is a static constexpr false — not read from the
+// JSON, and the code behind it is compiled out — so call sites need no #ifdef.
+#ifdef STEALTHSENSES_DEV
+#    define STEALTHSENSES_DEV_SETTING(type, name, value, comment) type name = value;
+inline constexpr bool kDevBuild = true;
+#else
+#    define STEALTHSENSES_DEV_SETTING(type, name, value, comment) static constexpr type name = false;
+inline constexpr bool kDevBuild = false;
+#endif
+
 namespace StealthSenses::Config {
     struct TrailSettings {
         bool  enabled                = true;
@@ -31,6 +42,7 @@ namespace StealthSenses::Config {
         float       hop_timeout      = 10.0f;   // give up walking to a search point after this
         float       look_seconds     = 4.0f;    // looks around at each search point
         bool        draw_weapon      = true;    // hostile humanoid trackers draw their weapon
+        bool        set_alert        = true;    // ...and go into vanilla alert (Actor.SetAlert): alert voice lines
         float       stuck_seconds    = 6.0f;    // not moving this long while walking = unreachable point
         float       stuck_give_up    = 20.0f;   // total such time since the last footprint = drop
         float       repickup_seconds = 15.0f;   // cooldown after a tracker is dropped
@@ -39,15 +51,18 @@ namespace StealthSenses::Config {
         bool        require_hostile  = false;
         bool        include_combat   = false;
         int         max_trackers     = 4;
-        bool        debug_all_npcs   = false;   // every High-process NPC tracks (AI obedience test)
+        STEALTHSENSES_DEV_SETTING(bool, debug_all_npcs, false, "every High-process NPC tracks (AI obedience test)")
     };
 
+    // Bug-report tools (log level, telemetry, mark key) ship in release too; telemetry is off by
+    // default there and a user turns it on to send a trace.
     struct DebugSettings {
         std::string log_level         = "info";
-        bool        console           = true;   // echo tracker decisions to the in-game console
-        bool        log_footstep_tags = true;
-        bool        telemetry         = true;   // StealthSenses.trace.jsonl next to the log
-        int         mark_key          = 0x41;   // DirectInput scan code; 0x41 = F7, 0 = off
+        bool        telemetry         = kDevBuild;  // StealthSenses.trace.jsonl next to the log
+        int         telemetry_max_mb  = 50;         // the trace is rotated to .1 beyond this
+        int         mark_key          = 0x41;       // DirectInput scan code; 0x41 = F7, 0 = off
+        STEALTHSENSES_DEV_SETTING(bool, console, true, "echo tracker decisions to the in-game console")
+        STEALTHSENSES_DEV_SETTING(bool, log_footstep_tags, true, "log each new footstep tag with its thread")
     };
 
     struct Settings {

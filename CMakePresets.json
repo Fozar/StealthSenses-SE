@@ -1,0 +1,36 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Dev (test switches)",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/cmake-build-dev",
+      "cacheVariables": {
+        "STEALTHSENSES_DEV": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release (no test switches, zip for Nexus)",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/cmake-build-release",
+      "cacheVariables": {
+        "STEALTHSENSES_DEV": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "release", "configurePreset": "release" }
+  ]
+}

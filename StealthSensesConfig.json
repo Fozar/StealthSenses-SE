@@ -28,6 +28,7 @@
         "hop_timeout": 10.0,
         "look_seconds": 4.0,
         "draw_weapon": true,
+        "set_alert": true,
         "stuck_seconds": 6.0,
         "stuck_give_up": 20.0,
         "repickup_seconds": 15.0,
@@ -35,14 +36,12 @@
         "caution_level": 40,
         "require_hostile": false,
         "include_combat": false,
-        "max_trackers": 4,
-        "debug_all_npcs": false
+        "max_trackers": 4
     },
     "debug": {
         "log_level": "info",
-        "console": true,
-        "log_footstep_tags": true,
-        "telemetry": true,
+        "telemetry": false,
+        "telemetry_max_mb": 50,
         "mark_key": 65
     }
 }

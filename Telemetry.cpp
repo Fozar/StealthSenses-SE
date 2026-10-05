@@ -6,8 +6,27 @@
 namespace StealthSenses::Telemetry {
     namespace {
         std::ofstream                         g_file;
+        std::filesystem::path                 g_path;
+        std::uintmax_t                        g_bytes = 0;
         std::chrono::steady_clock::time_point g_start;
         int                                   g_marks = 0;
+
+        // Release users may leave telemetry on for hours (~7 MB/h near NPCs): keep the newest
+        // part in the file and the previous one in .1
+        void RotateIfNeeded() {
+            const auto limit = static_cast<std::uintmax_t>(std::max(Config::Get().debug.telemetry_max_mb, 1)) << 20;
+            if (g_bytes < limit) {
+                return;
+            }
+            g_file.close();
+            auto            old = g_path;
+            std::error_code ec;
+            old += ".1";
+            std::filesystem::remove(old, ec);
+            std::filesystem::rename(g_path, old, ec);
+            g_file.open(g_path, std::ios::out | std::ios::trunc | std::ios::binary);
+            g_bytes = 0;
+        }
     }
 
     void Open() {
@@ -19,10 +38,10 @@ namespace StealthSenses::Telemetry {
             SKSE::log::warn("Telemetry: no log directory, disabled");
             return;
         }
-        const auto path = *dir / "StealthSenses.trace.jsonl";
-        g_file.open(path, std::ios::out | std::ios::trunc | std::ios::binary);
+        g_path = *dir / "StealthSenses.trace.jsonl";
+        g_file.open(g_path, std::ios::out | std::ios::trunc | std::ios::binary);
         g_start = std::chrono::steady_clock::now();
-        SKSE::log::info("Telemetry: writing {}", path.string());
+        SKSE::log::info("Telemetry: writing {}", g_path.string());
     }
 
     bool Enabled() {
@@ -38,8 +57,11 @@ namespace StealthSenses::Telemetry {
             a_record["gh"] = calendar->GetHoursPassed();
         }
         // Game strings may be invalid UTF-8; replace instead of throwing
-        g_file << a_record.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace) << '\n';
+        const auto line = a_record.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        g_file << line << '\n';
         g_file.flush();
+        g_bytes += line.size() + 1;
+        RotateIfNeeded();
     }
 
     void Log(std::string_view a_text) {
@@ -58,8 +80,10 @@ namespace StealthSenses::Telemetry {
 
         const auto text = std::format("Mark {}", g_marks);
         SKSE::log::info("=== {} ===", text);
-        if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("[StealthSenses] %s", text.c_str());
+        if (Config::Get().debug.console) {
+            if (auto* console = RE::ConsoleLog::GetSingleton()) {
+                console->Print("[StealthSenses] %s", text.c_str());
+            }
         }
         RE::SendHUDMessage::ShowHUDMessage(std::format("StealthSenses: {}", text).c_str());
     }

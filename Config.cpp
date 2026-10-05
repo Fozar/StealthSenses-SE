@@ -78,6 +78,7 @@ namespace StealthSenses::Config {
         Read(jk, "hop_timeout", k.hop_timeout);
         Read(jk, "look_seconds", k.look_seconds);
         Read(jk, "draw_weapon", k.draw_weapon);
+        Read(jk, "set_alert", k.set_alert);
         Read(jk, "stuck_seconds", k.stuck_seconds);
         Read(jk, "stuck_give_up", k.stuck_give_up);
         Read(jk, "repickup_seconds", k.repickup_seconds);
@@ -86,14 +87,19 @@ namespace StealthSenses::Config {
         Read(jk, "require_hostile", k.require_hostile);
         Read(jk, "include_combat", k.include_combat);
         Read(jk, "max_trackers", k.max_trackers);
+#ifdef STEALTHSENSES_DEV
         Read(jk, "debug_all_npcs", k.debug_all_npcs);
+#endif
 
         auto& d = g_settings.debug;
         const auto& jd = Section(root, "debug");
         Read(jd, "log_level", d.log_level);
+        Read(jd, "telemetry", d.telemetry);
+        Read(jd, "telemetry_max_mb", d.telemetry_max_mb);
+#ifdef STEALTHSENSES_DEV
         Read(jd, "console", d.console);
         Read(jd, "log_footstep_tags", d.log_footstep_tags);
-        Read(jd, "telemetry", d.telemetry);
+#endif
         Read(jd, "mark_key", d.mark_key);
 
         // Clamp values that would break the loops below

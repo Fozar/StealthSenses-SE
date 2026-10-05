@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(StealthSenses VERSION 0.4.1 LANGUAGES CXX)
+project(StealthSenses VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -97,6 +97,17 @@ target_include_directories(StealthSenses PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # <Windows.h> is included alongside RE headers; its min/max macros break them
 target_compile_definitions(StealthSenses PRIVATE NOMINMAX)
 
+# Dev build: test switches (console echo, debug_all_npcs, footstep tag log) — see Config.h.
+# Presets "dev" / "release" in CMakePresets.json set this.
+option(STEALTHSENSES_DEV "Build with test-only switches" OFF)
+if(STEALTHSENSES_DEV)
+    target_compile_definitions(StealthSenses PRIVATE STEALTHSENSES_DEV)
+    set(_pkg_suffix "-dev")
+else()
+    set(_pkg_suffix "")
+endif()
+set(_pkg_zip "StealthSenses-${PROJECT_VERSION}${_pkg_suffix}.zip")
+
 target_precompile_headers(StealthSenses PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
 
 target_link_libraries(StealthSenses PRIVATE nlohmann_json::nlohmann_json)
@@ -113,11 +124,11 @@ add_custom_command(TARGET StealthSenses POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/StealthSensesConfig.json"
         "${_pkg_plugins}/StealthSensesConfig.json"
     COMMAND ${CMAKE_COMMAND} -E tar cf
-        "${CMAKE_CURRENT_BINARY_DIR}/StealthSenses.zip" --format=zip
+        "${CMAKE_CURRENT_BINARY_DIR}/${_pkg_zip}" --format=zip
         -- "SKSE/Plugins/StealthSenses.dll"
            "SKSE/Plugins/StealthSensesConfig.json"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/_package"
-    COMMENT "Packaging StealthSenses.zip"
+    COMMENT "Packaging ${_pkg_zip}"
 )
 
 # Dev deploy: copy the DLL into a mod manager folder after each build,

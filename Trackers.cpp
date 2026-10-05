@@ -4,6 +4,8 @@
 #include "Telemetry.h"
 #include "Trail.h"
 
+#include <numbers>
+#include <random>
 #include <unordered_set>
 
 namespace StealthSenses::Trackers {
@@ -11,27 +13,57 @@ namespace StealthSenses::Trackers {
         // Skyrim.esm forms, FormIDs read from the record headers of the local Skyrim.esm.
         // Both packages target PLDT type 6 (linked reference) with keyword LinkCustom02 (0005D5E7),
         // so one marker serves both:
-        // defaultTravelToLinkCustom02 (template Travel 00016FAA) — walk to the footprint;
-        // DefaultSandboxLinkCustom02512 (template Sandbox 0001C254) — wander within 512 of it.
+        // defaultTravelToLinkCustom02 (template Travel 00016FAA) — walk to the marker;
+        // defaultHoldPositionLinkCustom02_256UntilReleased (template 000503D0) — stay at it.
         constexpr RE::FormID kTravelPackage = 0x000235E2;
-        constexpr RE::FormID kSearchPackage = 0x000DD837;
+        constexpr RE::FormID kHoldPackage   = 0x0009D74A;
         constexpr RE::FormID kKeyword       = 0x0005D5E7;
         constexpr RE::FormID kXMarker       = 0x0000003B;
+        constexpr RE::FormID kActorTypeNPC  = 0x00013794;
+        // Idles: IdlePickup_Ground (bend to the ground), IdleLookAround, IdleLookFar
+        constexpr RE::FormID kIdleExamine    = 0x00075C3E;
+        constexpr RE::FormID kIdleLookAround = 0x000F5D98;
+        constexpr RE::FormID kIdleLookFar    = 0x00075C62;
 
-        RE::TESPackage*     g_travel  = nullptr;
-        RE::TESPackage*     g_search  = nullptr;
-        RE::BGSKeyword*     g_keyword = nullptr;
-        RE::TESBoundObject* g_xmarker = nullptr;
-        bool                g_ready   = false;
+        RE::TESPackage*     g_travel     = nullptr;
+        RE::TESPackage*     g_hold       = nullptr;
+        RE::BGSKeyword*     g_keyword    = nullptr;
+        RE::BGSKeyword*     g_humanoid   = nullptr;
+        RE::TESBoundObject* g_xmarker    = nullptr;
+        RE::TESIdleForm*    g_examine    = nullptr;
+        RE::TESIdleForm*    g_lookAround = nullptr;
+        RE::TESIdleForm*    g_lookFar    = nullptr;
+        bool                g_ready      = false;
+
+        std::mt19937 g_rng{ std::random_device{}() };
+
+        // follow: walking to the next footprint; examine: standing at it, bent to the ground;
+        // hop: walking to a search point around the last footprint; look: standing there, looking around
+        enum class Mode { Follow, Examine, Hop, Look };
+
+        constexpr const char* ModeName(Mode a_mode) {
+            switch (a_mode) {
+            case Mode::Follow:  return "follow";
+            case Mode::Examine: return "examine";
+            case Mode::Hop:     return "hop";
+            default:            return "look";
+            }
+        }
 
         struct State {
+            Mode                             mode      = Mode::Follow;
             std::uint32_t                    lastSeq   = 0;
-            RE::NiPoint3                     target;
-            float                            sinceStep = 0.0f;
-            bool                             arrived   = false;
+            RE::NiPoint3                     trailPos;          // last footprint reached for
+            RE::NiPoint3                     heading;           // trail direction at it, unit 2D
+            RE::NiPoint3                     target;            // where the marker is now
+            float                            sinceStep  = 0.0f; // since the last footprint was given
+            float                            modeTime   = 0.0f;
+            float                            examineCooldown = 0.0f;
+            int                              hops       = 0;
+            bool                             arrived    = false;
+            bool                             humanoid   = false;
             RE::NiPointer<RE::TESObjectREFR> marker;
             RE::FormID                       prevLinked  = 0;
-            RE::TESPackage*                  intended    = nullptr;  // travel, or search once the trail runs out
             bool                             packageLost = false;
         };
 
@@ -93,6 +125,16 @@ namespace StealthSenses::Trackers {
             memory.cooldown = Config::Get().tracker.repickup_seconds;
         }
 
+        const Trail::Footprint* FindBySeq(std::uint32_t a_seq) {
+            // seq values are consecutive in the deque (Restore renumbers on load)
+            const auto& trail = Trail::Footprints();
+            if (trail.empty() || a_seq < trail.front().seq) {
+                return nullptr;
+            }
+            const auto index = static_cast<std::size_t>(a_seq - trail.front().seq);
+            return index < trail.size() && trail[index].seq == a_seq ? &trail[index] : nullptr;
+        }
+
         // Undoes what Steer did: linked ref back, marker gone, normal AI re-evaluated.
         void Release(RE::Actor* a_actor, RE::TESObjectREFR* a_marker, RE::FormID a_prevLinked) {
             if (a_actor && g_keyword) {
@@ -113,15 +155,43 @@ namespace StealthSenses::Trackers {
             Release(a_actor, a_state.marker.get(), a_state.prevLinked);
         }
 
+        RE::TESPackage* PackageFor(Mode a_mode) {
+            return a_mode == Mode::Follow || a_mode == Mode::Hop ? g_travel : g_hold;
+        }
+
         // Arguments: temp package, not created by us (a vanilla form must not be freed),
         // allowed to pull the NPC out of furniture. Semantics are not verified [assumption].
         void Apply(RE::Actor* a_actor, RE::TESPackage* a_package) {
             a_actor->PutCreatedPackage(a_package, true, false, true);
         }
 
+        void SetMode(RE::Actor* a_actor, State& a_state, Mode a_mode) {
+            a_state.mode        = a_mode;
+            a_state.modeTime    = 0.0f;
+            a_state.arrived     = false;
+            a_state.packageLost = false;
+            Apply(a_actor, PackageFor(a_mode));
+        }
+
+        void PlayIdle(RE::Actor* a_actor, const State& a_state, RE::TESIdleForm* a_idle) {
+            if (!a_state.humanoid || !a_idle) {
+                return;
+            }
+            auto*      process = a_actor->GetActorRuntimeData().currentProcess;
+            const bool played  = process && process->PlayIdle(a_actor, a_idle, nullptr);
+            Telemetry::Write({ { "type", "idle" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
+                { "idle", Telemetry::Hex(a_idle->GetFormID()) }, { "played", played } });
+        }
+
+        void MoveMarker(State& a_state, const RE::NiPoint3& a_pos) {
+            a_state.target = a_pos;
+            a_state.marker->SetPosition(a_pos);
+        }
+
         // Sends the NPC to the footprint: marker on the footprint, NPC linked to it, travel package.
         // False if the marker could not be placed; the caller must not keep the state then.
         bool Steer(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state, const Trail::Footprint& a_fp) {
+            const bool first = a_state.lastSeq == 0;
             if (!a_state.marker) {
                 a_state.marker = a_player->PlaceObjectAtMe(g_xmarker, false);
                 if (!a_state.marker) {
@@ -131,34 +201,52 @@ namespace StealthSenses::Trackers {
                 const auto* prev   = a_actor->extraList.GetLinkedRef(g_keyword);
                 a_state.prevLinked = prev ? prev->GetFormID() : 0;
                 a_actor->extraList.SetLinkedRef(a_state.marker.get(), g_keyword);
+                a_state.humanoid = g_humanoid && a_actor->HasKeyword(g_humanoid);
+
+                // A hunter with a weapon in hand reads as "tracking someone" at a glance
+                if (Config::Get().tracker.draw_weapon && a_state.humanoid && a_actor->IsHostileToActor(a_player)) {
+                    a_actor->DrawWeaponMagicHands(true);
+                }
             }
-            a_state.marker->SetPosition(a_fp.pos);
 
-            const bool first    = a_state.lastSeq == 0;
-            a_state.lastSeq     = a_fp.seq;
-            a_state.target      = a_fp.pos;
-            a_state.sinceStep   = 0.0f;
-            a_state.arrived     = false;
-            a_state.packageLost = false;
-            a_state.intended    = g_travel;
+            // Trail direction at this footprint, from the footprint before it
+            if (const auto* prev = FindBySeq(a_fp.seq - 1)) {
+                auto dir = a_fp.pos - prev->pos;
+                dir.z    = 0.0f;
+                if (const float len = dir.Length(); len > 1.0f) {
+                    a_state.heading = dir / len;
+                }
+            }
 
-            Apply(a_actor, g_travel);
+            MoveMarker(a_state, a_fp.pos);
+            a_state.lastSeq   = a_fp.seq;
+            a_state.trailPos  = a_fp.pos;
+            a_state.sinceStep = 0.0f;
+            a_state.hops      = 0;
+            SetMode(a_actor, a_state, Mode::Follow);
 
-            const auto* current = a_actor->GetCurrentPackage();
-            Say(std::format("{} {} footprint #{} dist {:.0f}, package {:08X}{}",
-                Describe(a_actor), first ? "picked up trail at" : "follows to", a_fp.seq,
-                a_actor->GetPosition().GetDistance(a_fp.pos), current ? current->GetFormID() : 0,
-                current == g_travel ? "" : " (not ours!)"));
+            Say(std::format("{} {} footprint #{} dist {:.0f}", Describe(a_actor),
+                first ? "picked up trail at" : "follows to", a_fp.seq, a_actor->GetPosition().GetDistance(a_fp.pos)));
             return true;
         }
 
-        // The trail ran out at the marker: wander around it instead of re-sending the finished
-        // travel package (test 0.2.2: travel done -> own sleep package -> travel again, 16 s of dithering)
-        void Search(RE::Actor* a_actor, State& a_state) {
-            a_state.intended    = g_search;
-            a_state.packageLost = false;
-            Apply(a_actor, g_search);
-            Say(std::format("{} searches around #{}", Describe(a_actor), a_state.lastSeq));
+        // The trail ran out: walk to points around the last footprint, biased along the trail
+        // direction at first and wider with every hop, and look around at each.
+        void NextHop(RE::Actor* a_actor, State& a_state) {
+            const auto& cfg = Config::Get().tracker;
+            ++a_state.hops;
+            const float spread  = std::min(50.0f * a_state.hops, 180.0f) * std::numbers::pi_v<float> / 180.0f;
+            const float heading = a_state.heading.Length() > 0.5f ? std::atan2(a_state.heading.y, a_state.heading.x)
+                                                                   : std::uniform_real_distribution<float>(-3.14159f, 3.14159f)(g_rng);
+            const float angle   = heading + std::uniform_real_distribution<float>(-spread, spread)(g_rng);
+            const float dist    = std::uniform_real_distribution<float>(250.0f, std::max(cfg.search_radius, 300.0f))(g_rng);
+
+            RE::NiPoint3 point = a_state.trailPos;
+            point.x += std::cos(angle) * dist;
+            point.y += std::sin(angle) * dist;
+            MoveMarker(a_state, point);
+            SetMode(a_actor, a_state, Mode::Hop);
+            Say(std::format("{} searches around #{}: hop {} ({:.0f} away from it)", Describe(a_actor), a_state.lastSeq, a_state.hops, dist));
         }
     }
 
@@ -167,18 +255,24 @@ namespace StealthSenses::Trackers {
         if (!data) {
             return false;
         }
-        g_travel  = data->LookupForm<RE::TESPackage>(kTravelPackage, "Skyrim.esm");
-        g_search  = data->LookupForm<RE::TESPackage>(kSearchPackage, "Skyrim.esm");
-        g_keyword = data->LookupForm<RE::BGSKeyword>(kKeyword, "Skyrim.esm");
+        g_travel     = data->LookupForm<RE::TESPackage>(kTravelPackage, "Skyrim.esm");
+        g_hold       = data->LookupForm<RE::TESPackage>(kHoldPackage, "Skyrim.esm");
+        g_keyword    = data->LookupForm<RE::BGSKeyword>(kKeyword, "Skyrim.esm");
+        g_humanoid   = data->LookupForm<RE::BGSKeyword>(kActorTypeNPC, "Skyrim.esm");
+        g_examine    = data->LookupForm<RE::TESIdleForm>(kIdleExamine, "Skyrim.esm");
+        g_lookAround = data->LookupForm<RE::TESIdleForm>(kIdleLookAround, "Skyrim.esm");
+        g_lookFar    = data->LookupForm<RE::TESIdleForm>(kIdleLookFar, "Skyrim.esm");
         // 0x3B is a hardcoded engine form below 0x800: LookupForm(…, "Skyrim.esm") returns
         // null for it (in-game test 0.2.0), the global lookup finds it
         if (auto* form = RE::TESForm::LookupByID(kXMarker)) {
             g_xmarker = form->As<RE::TESBoundObject>();
         }
-        SKSE::log::info("Trackers: travel {:08X} search {:08X} keyword {:08X} xmarker {:08X}",
-            g_travel ? g_travel->GetFormID() : 0, g_search ? g_search->GetFormID() : 0,
-            g_keyword ? g_keyword->GetFormID() : 0, g_xmarker ? g_xmarker->GetFormID() : 0);
-        g_ready = g_travel && g_search && g_keyword && g_xmarker;
+        SKSE::log::info("Trackers: travel {:08X} hold {:08X} keyword {:08X} xmarker {:08X} idles {} {} {}",
+            g_travel ? g_travel->GetFormID() : 0, g_hold ? g_hold->GetFormID() : 0,
+            g_keyword ? g_keyword->GetFormID() : 0, g_xmarker ? g_xmarker->GetFormID() : 0,
+            g_examine != nullptr, g_lookAround != nullptr, g_lookFar != nullptr);
+        // Idles and the humanoid keyword are cosmetic: missing ones only skip the animation
+        g_ready = g_travel && g_hold && g_keyword && g_xmarker;
         return g_ready;
     }
 
@@ -245,12 +339,13 @@ namespace StealthSenses::Trackers {
                     { "pos", Telemetry::Vec(a_actor->GetPosition()) }, { "meter", meter }, { "alert", alerted },
                     { "combat", combat }, { "hostile", hostile },
                     { "sitsleep", state ? static_cast<int>(state->GetSitSleepState()) : -1 },
+                    { "weapon", state && state->IsWeaponDrawn() },
                     { "pkg", Telemetry::Hex(package ? package->GetFormID() : 0) } };
                 if (tracked != g_trackers.end()) {
                     const auto& s = tracked->second;
                     npc["track"] = { { "seq", s.lastSeq }, { "target", Telemetry::Vec(s.target) },
-                        { "mode", s.intended == g_search ? "search" : "travel" }, { "since", s.sinceStep },
-                        { "arrived", s.arrived } };
+                        { "trail", Telemetry::Vec(s.trailPos) }, { "mode", ModeName(s.mode) },
+                        { "since", s.sinceStep }, { "modeTime", s.modeTime }, { "hops", s.hops } };
                 }
                 Telemetry::Write(std::move(npc));
             }
@@ -309,31 +404,31 @@ namespace StealthSenses::Trackers {
 
             auto& state = tracked->second;
             state.sinceStep += a_deltaSeconds;
+            state.modeTime += a_deltaSeconds;
+            state.examineCooldown = std::max(state.examineCooldown - a_deltaSeconds, 0.0f);
 
-            const auto* current  = a_actor->GetCurrentPackage();
-            const float toTarget = pos.GetDistance(state.target);
-            SKSE::log::trace("{} -> #{}: {:.0f} away after {:.1f}s, package {:08X}",
-                Describe(a_actor), state.lastSeq, toTarget, state.sinceStep, current ? current->GetFormID() : 0);
-            if (current != state.intended) {
+            const auto* current = a_actor->GetCurrentPackage();
+            if (current != PackageFor(state.mode)) {
                 // Another package won the evaluation (seen in test 0.2.1: dynamic FF… packages
-                // and the NPC's own patrol). Put ours back; log only the first time per point.
+                // and the NPC's own patrol). Put ours back; log only the first time per mode.
                 if (!state.packageLost) {
                     state.packageLost = true;
-                    Note(std::format("{} package replaced by {:08X} after {:.1f}s, reapplying",
-                        Describe(a_actor), current ? current->GetFormID() : 0, state.sinceStep));
+                    Note(std::format("{} package replaced by {:08X} in {} after {:.1f}s, reapplying",
+                        Describe(a_actor), current ? current->GetFormID() : 0, ModeName(state.mode), state.modeTime));
                 }
-                Apply(a_actor, state.intended);
+                Apply(a_actor, PackageFor(state.mode));
             }
 
+            const float toTarget = pos.GetDistance(state.target);
             if (!state.arrived && toTarget <= cfg.arrive_radius) {
                 state.arrived = true;
-                Note(std::format("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.sinceStep));
-            }
-            if (!state.arrived && state.sinceStep < cfg.retarget_seconds) {
-                return RE::BSContainer::ForEachResult::kContinue;
+                if (state.mode == Mode::Follow) {
+                    Note(std::format("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.modeTime));
+                }
             }
 
-            // Next point: the freshest readable footprint ahead on the trail within sight
+            // Continuation of the trail: the freshest readable footprint ahead within sight, or
+            // after a gap (e.g. the trail crossed stone) the first one near the last footprint
             const Trail::Footprint* next = nullptr;
             for (const auto* fp : readable) {
                 if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance &&
@@ -341,34 +436,79 @@ namespace StealthSenses::Trackers {
                     next = fp;
                 }
             }
-            // Nothing ahead in sight (e.g. the trail crossed stone): the first readable footprint
-            // after the gap, measured from the last point, as a tracker casting around would find it
             bool gap = false;
             if (!next) {
                 for (const auto* fp : readable) {
-                    if (fp->seq > state.lastSeq && state.target.GetDistance(fp->pos) <= cfg.gap_distance &&
+                    if (fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
                         (!next || fp->seq < next->seq)) {
                         next = fp;
                         gap  = true;
                     }
                 }
             }
-            if (next) {
+            auto follow = [&]() {
                 if (gap) {
-                    Note(std::format("{} picks the trail up again after a gap: #{} -> #{}",
-                        Describe(a_actor), state.lastSeq, next->seq));
-                }
-                if (!state.arrived) {
-                    Note(std::format("{} did not reach #{} in {:.1f}s (still {:.0f} away)",
-                        Describe(a_actor), state.lastSeq, state.sinceStep, toTarget));
+                    Note(std::format("{} picks the trail up again after a gap: #{} -> #{}", Describe(a_actor), state.lastSeq, next->seq));
                 }
                 Steer(player, a_actor, state, *next);
-            } else if (state.sinceStep >= cfg.lost_seconds) {
-                Drop(a_actor, state, "lost the trail");
-                seen.erase(id);
-            } else if (state.intended != g_search) {
-                // Arrived (or stuck for retarget_seconds) with nothing ahead yet
-                Search(a_actor, state);
+            };
+            auto searchOrGiveUp = [&]() {
+                if (state.sinceStep >= cfg.lost_seconds) {
+                    Drop(a_actor, state, "lost the trail");
+                    seen.erase(id);
+                } else {
+                    NextHop(a_actor, state);
+                }
+            };
+
+            switch (state.mode) {
+            case Mode::Follow:
+                if (state.arrived && state.humanoid && state.examineCooldown <= 0.0f) {
+                    // Bends down to read the footprint before going on
+                    state.examineCooldown = cfg.examine_every;
+                    SetMode(a_actor, state, Mode::Examine);
+                    PlayIdle(a_actor, state, g_examine);
+                    Say(std::format("{} examines footprint #{}", Describe(a_actor), state.lastSeq));
+                } else if (state.arrived || state.modeTime >= cfg.retarget_seconds) {
+                    if (!state.arrived) {
+                        Note(std::format("{} did not reach #{} in {:.1f}s (still {:.0f} away)",
+                            Describe(a_actor), state.lastSeq, state.modeTime, toTarget));
+                    }
+                    if (next) {
+                        follow();
+                    } else {
+                        searchOrGiveUp();
+                    }
+                }
+                break;
+            case Mode::Examine:
+                if (state.modeTime >= cfg.examine_seconds) {
+                    if (next) {
+                        follow();
+                    } else {
+                        searchOrGiveUp();
+                    }
+                }
+                break;
+            case Mode::Hop:
+                if (next) {
+                    Say(std::format("{} found the trail again at #{}", Describe(a_actor), next->seq));
+                    follow();
+                } else if (state.sinceStep >= cfg.lost_seconds) {
+                    searchOrGiveUp();
+                } else if (state.arrived || state.modeTime >= cfg.hop_timeout) {
+                    SetMode(a_actor, state, Mode::Look);
+                    PlayIdle(a_actor, state, state.hops % 2 ? g_lookAround : g_lookFar);
+                }
+                break;
+            case Mode::Look:
+                if (next) {
+                    Say(std::format("{} found the trail again at #{}", Describe(a_actor), next->seq));
+                    follow();
+                } else if (state.modeTime >= cfg.look_seconds) {
+                    searchOrGiveUp();
+                }
+                break;
             }
             return RE::BSContainer::ForEachResult::kContinue;
         });

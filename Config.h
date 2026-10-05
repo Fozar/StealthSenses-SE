@@ -24,7 +24,13 @@ namespace StealthSenses::Config {
         float       gap_distance     = 1200.0f; // look this far past the last point when the trail breaks
         float       arrive_radius    = 300.0f;  // travel packages stop ~260-280 short of the marker
         float       retarget_seconds = 12.0f;   // give the next point even if the NPC never arrived
-        float       lost_seconds     = 30.0f;   // drop the tracker after this long without a new point
+        float       lost_seconds     = 45.0f;   // drop the tracker after this long without a new footprint
+        float       examine_seconds  = 3.5f;    // stands bent over a footprint (humanoids)
+        float       examine_every    = 15.0f;   // at most one examine per this many seconds
+        float       search_radius    = 700.0f;  // search hops land 250..this from the last footprint
+        float       hop_timeout      = 10.0f;   // give up walking to a search point after this
+        float       look_seconds     = 4.0f;    // looks around at each search point
+        bool        draw_weapon      = true;    // hostile humanoid trackers draw their weapon
         float       repickup_seconds = 15.0f;   // cooldown after a tracker is dropped
         float       min_visibility   = 0.2f;
         int         caution_level    = 40;      // stealth meter value 0..100 that counts as "suspicious"

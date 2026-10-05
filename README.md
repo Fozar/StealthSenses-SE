@@ -2,6 +2,8 @@
 
 An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns your footprints into evidence. Hostile NPCs who have reason to be suspicious can notice the trail you leave, read it, and follow it — bending down to examine a print, losing it on bare rock, casting around to pick it up again, and eventually walking straight into your hiding place.
 
+**Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163
+
 > **Status: early access (0.7.x).** The trail mechanic works and is tested in game on AE 1.6.1170. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
 
 ---
@@ -169,7 +171,7 @@ CMake 3.28+, MSVC (Visual Studio 2022 Build Tools), C++23, Ninja. Dependencies (
 
 Configure presets (`CMakePresets.json`, selectable as profiles in CLion):
 
-- **`release`** → `cmake-build-release/StealthSenses-<version>.zip`
+- **`release`** → `cmake-build-release/StealthSenses.zip`
 - **`dev`** → `cmake-build-dev/`, with test switches compiled in (console echo of tracker decisions, `debug_all_npcs` to turn every NPC into a tracker, footstep tag logging)
 
 To copy the DLL into a mod manager folder after every build, set `STEALTHSENSES_DEPLOY_DIR`, e.g. in a local `CMakeUserPresets.json`:

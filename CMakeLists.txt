@@ -106,7 +106,7 @@ if(STEALTHSENSES_DEV)
 else()
     set(_pkg_suffix "")
 endif()
-set(_pkg_zip "StealthSenses-${PROJECT_VERSION}${_pkg_suffix}.zip")
+set(_pkg_zip "StealthSenses${_pkg_suffix}.zip")
 
 target_precompile_headers(StealthSenses PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
 

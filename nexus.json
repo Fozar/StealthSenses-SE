@@ -1,0 +1,15 @@
+{
+  "game": "skyrimspecialedition",
+  "mod": 194163,
+  "mod_uid": "7318624466547",
+  "file_id": "8092227",
+  "archive_previous": true,
+  "name": "Stealth Senses",
+  "category": "main",
+  "description": "Early access. SKSE plugin, no ESP. Tested on AE 1.6.1170; SE 1.5.97 should work but is untested. Requires SKSE and Address Library.",
+  "version": {"file": "CMakeLists.txt", "regex": "^project[(]StealthSenses VERSION ([0-9.]+)"},
+  "changelog": "CHANGELOG.md",
+  "archive": "cmake-build-release/StealthSenses.zip",
+  "build": "cmake --preset release && cmake --build cmake-build-release -j 4 (post-build packs the zip)",
+  "page_text": "nexus_description.txt"
+}

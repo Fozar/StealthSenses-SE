@@ -1,0 +1,16 @@
+# CMake
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+
+# CLion
+.idea/
+
+# Windows
+*.stackdump
+Thumbs.db
+
+# SKSE plugin output
+*.dll
+*.pdb

@@ -1,0 +1,37 @@
+{
+    "trail": {
+        "enabled": true,
+        "min_spacing": 64.0,
+        "max_footprints": 2048,
+        "poll_interval_ms": 250,
+        "halflife_hours": 2.0,
+        "weather_halflife_mult": 0.35,
+        "soft_visibility": 1.0,
+        "gravel_visibility": 0.6,
+        "hard_visibility": 0.15,
+        "unknown_visibility": 0.5,
+        "blood_steps": 20,
+        "blood_visibility_bonus": 1.0
+    },
+    "tracker": {
+        "enabled": true,
+        "interval_ms": 1000,
+        "search_radius": 2000.0,
+        "lead_distance": 900.0,
+        "arrive_radius": 160.0,
+        "retarget_seconds": 12.0,
+        "lost_seconds": 30.0,
+        "min_visibility": 0.2,
+        "caution_level": 40,
+        "require_hostile": false,
+        "include_combat": false,
+        "sound_level": "quiet",
+        "max_trackers": 4,
+        "debug_all_npcs": false
+    },
+    "debug": {
+        "log_level": "info",
+        "console": true,
+        "log_footstep_tags": true
+    }
+}

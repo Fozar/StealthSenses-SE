@@ -741,6 +741,11 @@ namespace StealthSenses::Trackers {
             auto* actor  = RE::TESForm::LookupByID<RE::Actor>(binding.actor);
             auto* marker = RE::TESForm::LookupByID<RE::TESObjectREFR>(binding.marker);
             Release(actor, marker, binding.prevLinked);
+            // The alert flag we set is saved with the game: without this a reloaded tracker was
+            // alerted, hence suspicious, and took the trail up again 0.1 s after load (test 0.6.1)
+            if (actor && Config::Get().tracker.set_alert && !actor->IsInCombat()) {
+                SetAlert(actor, false);
+            }
             SKSE::log::info("Released saved tracker binding: actor {:08X} marker {:08X} (found: {}, {})",
                 binding.actor, binding.marker, actor != nullptr, marker != nullptr);
         }

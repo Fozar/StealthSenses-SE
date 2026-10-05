@@ -8,28 +8,30 @@
 namespace StealthSenses::Trackers {
     namespace {
         // Skyrim.esm forms, FormIDs read from the record headers of the local Skyrim.esm.
-        // Both packages are PLDT type 6 (linked reference) with the matching keyword:
-        // defaultTravelToLinkCustom02 -> LinkCustom02 (0005D5E7),
-        // defaultTravelToLinkCustom03RunWeaponDrawn -> LinkCustom03 (0005D5E8) [assumed by name]
-        constexpr RE::FormID kWalkPackage = 0x000235E2;
-        constexpr RE::FormID kWalkKeyword = 0x0005D5E7;
-        constexpr RE::FormID kRunPackage  = 0x00023607;
-        constexpr RE::FormID kRunKeyword  = 0x0005D5E8;
-        constexpr RE::FormID kXMarker     = 0x0000003B;
+        // Both packages target PLDT type 6 (linked reference) with keyword LinkCustom02 (0005D5E7),
+        // so one marker serves both:
+        // defaultTravelToLinkCustom02 (template Travel 00016FAA) — walk to the footprint;
+        // DefaultSandboxLinkCustom02512 (template Sandbox 0001C254) — wander within 512 of it.
+        constexpr RE::FormID kTravelPackage = 0x000235E2;
+        constexpr RE::FormID kSearchPackage = 0x000DD837;
+        constexpr RE::FormID kKeyword       = 0x0005D5E7;
+        constexpr RE::FormID kXMarker       = 0x0000003B;
 
-        RE::TESPackage*    g_package = nullptr;
-        RE::BGSKeyword*    g_keyword = nullptr;
+        RE::TESPackage*     g_travel  = nullptr;
+        RE::TESPackage*     g_search  = nullptr;
+        RE::BGSKeyword*     g_keyword = nullptr;
         RE::TESBoundObject* g_xmarker = nullptr;
-        bool               g_ready   = false;
+        bool                g_ready   = false;
 
         struct State {
-            std::uint32_t                 lastSeq   = 0;
-            RE::NiPoint3                  target;
-            float                         sinceStep = 0.0f;
-            bool                          arrived   = false;
+            std::uint32_t                    lastSeq   = 0;
+            RE::NiPoint3                     target;
+            float                            sinceStep = 0.0f;
+            bool                             arrived   = false;
             RE::NiPointer<RE::TESObjectREFR> marker;
-            RE::FormID                    prevLinked = 0;
-            bool                          packageLost = false;
+            RE::FormID                       prevLinked  = 0;
+            RE::TESPackage*                  intended    = nullptr;  // travel, or search once the trail runs out
+            bool                             packageLost = false;
         };
 
         // Survives dropping a tracker: an NPC that lost the trail or saw the player does not
@@ -104,6 +106,12 @@ namespace StealthSenses::Trackers {
             Release(a_actor, a_state.marker.get(), a_state.prevLinked);
         }
 
+        // Arguments: temp package, not created by us (a vanilla form must not be freed),
+        // allowed to pull the NPC out of furniture. Semantics are not verified [assumption].
+        void Apply(RE::Actor* a_actor, RE::TESPackage* a_package) {
+            a_actor->PutCreatedPackage(a_package, true, false, true);
+        }
+
         // Sends the NPC to the footprint: marker on the footprint, NPC linked to it, travel package.
         // False if the marker could not be placed; the caller must not keep the state then.
         bool Steer(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state, const Trail::Footprint& a_fp) {
@@ -125,17 +133,25 @@ namespace StealthSenses::Trackers {
             a_state.sinceStep   = 0.0f;
             a_state.arrived     = false;
             a_state.packageLost = false;
+            a_state.intended    = g_travel;
 
-            // Arguments: temp package, not created by us (a vanilla form must not be freed),
-            // allowed to pull the NPC out of furniture. Semantics are not verified [assumption].
-            a_actor->PutCreatedPackage(g_package, true, false, true);
+            Apply(a_actor, g_travel);
 
             const auto* current = a_actor->GetCurrentPackage();
             Say(std::format("{} {} footprint #{} dist {:.0f}, package {:08X}{}",
                 Describe(a_actor), first ? "picked up trail at" : "follows to", a_fp.seq,
                 a_actor->GetPosition().GetDistance(a_fp.pos), current ? current->GetFormID() : 0,
-                current == g_package ? "" : " (not ours!)"));
+                current == g_travel ? "" : " (not ours!)"));
             return true;
+        }
+
+        // The trail ran out at the marker: wander around it instead of re-sending the finished
+        // travel package (test 0.2.2: travel done -> own sleep package -> travel again, 16 s of dithering)
+        void Search(RE::Actor* a_actor, State& a_state) {
+            a_state.intended    = g_search;
+            a_state.packageLost = false;
+            Apply(a_actor, g_search);
+            Say(std::format("{} searches around #{}", Describe(a_actor), a_state.lastSeq));
         }
     }
 
@@ -144,18 +160,18 @@ namespace StealthSenses::Trackers {
         if (!data) {
             return false;
         }
-        const bool run = Config::Get().tracker.package_style == "run";
-        g_package      = data->LookupForm<RE::TESPackage>(run ? kRunPackage : kWalkPackage, "Skyrim.esm");
-        g_keyword      = data->LookupForm<RE::BGSKeyword>(run ? kRunKeyword : kWalkKeyword, "Skyrim.esm");
+        g_travel  = data->LookupForm<RE::TESPackage>(kTravelPackage, "Skyrim.esm");
+        g_search  = data->LookupForm<RE::TESPackage>(kSearchPackage, "Skyrim.esm");
+        g_keyword = data->LookupForm<RE::BGSKeyword>(kKeyword, "Skyrim.esm");
         // 0x3B is a hardcoded engine form below 0x800: LookupForm(…, "Skyrim.esm") returns
         // null for it (in-game test 0.2.0), the global lookup finds it
         if (auto* form = RE::TESForm::LookupByID(kXMarker)) {
             g_xmarker = form->As<RE::TESBoundObject>();
         }
-        SKSE::log::info("Trackers: package {:08X} keyword {:08X} xmarker {:08X}",
-            g_package ? g_package->GetFormID() : 0, g_keyword ? g_keyword->GetFormID() : 0,
-            g_xmarker ? g_xmarker->GetFormID() : 0);
-        g_ready = g_package && g_keyword && g_xmarker;
+        SKSE::log::info("Trackers: travel {:08X} search {:08X} keyword {:08X} xmarker {:08X}",
+            g_travel ? g_travel->GetFormID() : 0, g_search ? g_search->GetFormID() : 0,
+            g_keyword ? g_keyword->GetFormID() : 0, g_xmarker ? g_xmarker->GetFormID() : 0);
+        g_ready = g_travel && g_search && g_keyword && g_xmarker;
         return g_ready;
     }
 
@@ -264,7 +280,7 @@ namespace StealthSenses::Trackers {
             const float toTarget = pos.GetDistance(state.target);
             SKSE::log::trace("{} -> #{}: {:.0f} away after {:.1f}s, package {:08X}",
                 Describe(a_actor), state.lastSeq, toTarget, state.sinceStep, current ? current->GetFormID() : 0);
-            if (current != g_package) {
+            if (current != state.intended) {
                 // Another package won the evaluation (seen in test 0.2.1: dynamic FF… packages
                 // and the NPC's own patrol). Put ours back; log only the first time per point.
                 if (!state.packageLost) {
@@ -272,7 +288,7 @@ namespace StealthSenses::Trackers {
                     SKSE::log::info("{} package replaced by {:08X} after {:.1f}s, reapplying",
                         Describe(a_actor), current ? current->GetFormID() : 0, state.sinceStep);
                 }
-                a_actor->PutCreatedPackage(g_package, true, false, true);
+                Apply(a_actor, state.intended);
             }
 
             if (!state.arrived && toTarget <= cfg.arrive_radius) {
@@ -316,6 +332,9 @@ namespace StealthSenses::Trackers {
             } else if (state.sinceStep >= cfg.lost_seconds) {
                 Drop(a_actor, state, "lost the trail");
                 seen.erase(id);
+            } else if (state.intended != g_search) {
+                // Arrived (or stuck for retarget_seconds) with nothing ahead yet
+                Search(a_actor, state);
             }
             return RE::BSContainer::ForEachResult::kContinue;
         });

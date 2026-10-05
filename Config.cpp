@@ -77,7 +77,6 @@ namespace StealthSenses::Config {
         Read(jk, "caution_level", k.caution_level);
         Read(jk, "require_hostile", k.require_hostile);
         Read(jk, "include_combat", k.include_combat);
-        Read(jk, "package_style", k.package_style);
         Read(jk, "max_trackers", k.max_trackers);
         Read(jk, "debug_all_npcs", k.debug_all_npcs);
 

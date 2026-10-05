@@ -27,7 +27,6 @@
         "caution_level": 40,
         "require_hostile": false,
         "include_combat": false,
-        "package_style": "walk",
         "max_trackers": 4,
         "debug_all_npcs": false
     },

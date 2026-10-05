@@ -30,7 +30,6 @@ namespace StealthSenses::Config {
         int         caution_level    = 40;      // stealth meter value 0..100 that counts as "suspicious"
         bool        require_hostile  = false;
         bool        include_combat   = false;
-        std::string package_style    = "walk";  // walk | run (run = weapon drawn)
         int         max_trackers     = 4;
         bool        debug_all_npcs   = false;   // every High-process NPC tracks (AI obedience test)
     };

@@ -1,0 +1,142 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&display=block" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0e141f; }
+  svg { display: block; }
+  .h1 { font-family: 'Cinzel', Georgia, serif; font-weight: 700; letter-spacing: 0.08em; }
+  .ui { font-family: 'Inter', 'Segoe UI', sans-serif; }
+</style></head>
+<body>
+<svg id="svg" width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="55%" cy="55%" r="80%">
+      <stop offset="0" stop-color="#1b2433"/><stop offset="1" stop-color="#0b1018"/>
+    </radialGradient>
+    <pattern id="grid" width="70" height="70" patternUnits="userSpaceOnUse">
+      <path d="M 70 0 L 0 0 0 70" fill="none" stroke="#ffffff" stroke-opacity="0.035"/>
+    </pattern>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+    <symbol id="boot" viewBox="-17 -43 34 86" overflow="visible">
+      <path d="M -11 -10 C -14 -28 -7 -43 2 -42 C 12 -41 15 -27 12 -9 C 10 3 9 7 9 12 L -9 12 C -9 6 -9 1 -11 -10 Z"/>
+      <path d="M -9 19 C -10 30 -6 42 0 42 C 6 42 10 31 9 19 Z"/>
+    </symbol>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f2a64a"/>
+    </marker>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#grid)"/>
+  <g id="map"></g>
+  <g id="ui"></g>
+</svg>
+<script>
+const DATA = /*DATA*/;
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; parent.appendChild(e); return e; };
+const map = document.getElementById('map'), ui = document.getElementById('ui');
+
+const track = DATA.bandit.filter(b => b.mode);
+const tStart = track[0].t, tEnd = track[track.length - 1].t;
+// Frame: the tracker's route plus the footprints around it
+const near = (f) => track.some(b => Math.hypot(b.x - f.x, b.y - f.y) < 1600);
+const fps = DATA.footprints.filter(near).sort((a, b) => a.seq - b.seq);
+const meEnd = DATA.player.reduce((best, p) => Math.abs(p.t - tEnd) < Math.abs(best.t - tEnd) ? p : best, DATA.player[0]);
+const pts = [...track, ...fps, meEnd];
+const minX = Math.min(...pts.map(p => p.x)), maxX = Math.max(...pts.map(p => p.x));
+const minY = Math.min(...pts.map(p => p.y)), maxY = Math.max(...pts.map(p => p.y));
+const box = { x: 640, y: 130, w: 1200, h: 880 };
+const scale = Math.min(box.w / (maxX - minX), box.h / (maxY - minY));
+const offX = box.x + (box.w - (maxX - minX) * scale) / 2, offY = box.y + (box.h - (maxY - minY) * scale) / 2;
+const P = (p) => [offX + (p.x - minX) * scale, offY + (maxY - p.y) * scale];   // north up
+
+// Footprints by surface: soft ground clear, rock faint
+const SOFT = new Set(['B9233EAA', '6E2F68EE', '17C77AAF']);   // dirt, grass, snow
+const footG = el('g', {}, map);
+fps.forEach((f, i) => {
+  const a = fps[Math.max(0, i - 1)], b = fps[Math.min(fps.length - 1, i + 1)];
+  const [ax, ay] = P(a), [bx, by] = P(b), [x, y] = P(f);
+  if (Math.hypot(bx - ax, by - ay) < 0.5) return;
+  const ang = Math.atan2(by - ay, bx - ax) * 180 / Math.PI + 90;
+  const side = f.seq % 2 ? 1 : -1;
+  const nx = -(by - ay), ny = bx - ax, nl = Math.hypot(nx, ny);
+  const soft = SOFT.has(f.mat), unknown = f.mat === '00000000';
+  const color = soft ? '#e6c995' : unknown ? '#b9c3d3' : '#8a93a3';
+  const seqs = track.map(b => b.seq).filter(Boolean); const lo = Math.min(...seqs) - 25, hi = Math.max(...seqs) + 120;
+  const mine = f.seq >= lo && f.seq <= hi;
+  const op = (soft ? 0.95 : unknown ? 0.6 : 0.4) * (mine ? 1 : 0.22);
+  const g = el('g', { transform: `translate(${(x + nx / nl * 4 * side).toFixed(1)} ${(y + ny / nl * 4 * side).toFixed(1)}) rotate(${ang.toFixed(1)}) scale(${side < 0 ? -1 : 1} 1)` }, footG);
+  el('use', { href: '#boot', x: -4.5, y: -11, width: 9, height: 22, fill: color, 'fill-opacity': op }, g);
+});
+
+// Tracker route
+const d = track.map((b, i) => { const [x, y] = P(b); return (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1); }).join(' ');
+el('path', { d, fill: 'none', stroke: '#f2a64a', 'stroke-width': 9, 'stroke-opacity': 0.18, filter: 'url(#glow)' }, map);
+el('path', { d, fill: 'none', stroke: '#f2a64a', 'stroke-width': 3, 'stroke-linejoin': 'round', 'marker-end': 'url(#arrow)' }, map);
+
+// Numbered events at the tracker's position at that moment
+const at = (t) => track.reduce((best, b) => Math.abs(b.t - t) < Math.abs(best.t - t) ? b : best, track[0]);
+const events = [
+  { t: 177.2, title: 'Picks up the trail', text: 'Lost you in the fight a moment ago — then spots a footprint in front of it.' },
+  { t: 178.4, title: 'Examines the print', text: 'Bends down to the ground, draws its weapon, goes on alert.' },
+  { t: 190.5, title: 'Follows', text: 'Walks from print to print — about 8 seconds per stretch on soft ground.' },
+  { t: 198.0, title: 'Examines again', text: 'Stops at a print to read it before going on.' },
+  { t: 214.3, title: 'Trail breaks on rock', text: 'No clear print ahead — casts around and picks the trail up further on.' },
+];
+const used = [];
+events.forEach((e, i) => {
+  const b = at(e.t); let [x, y] = P(b);
+  // nudge markers that land on top of each other
+  for (const u of used) if (Math.hypot(u[0] - x, u[1] - y) < 34) { y -= 38; }
+  used.push([x, y]);
+  el('circle', { cx: x, cy: y, r: 17, fill: '#0e141f', stroke: '#f2a64a', 'stroke-width': 2.5 }, map);
+  el('text', { x, y: y + 6, 'text-anchor': 'middle', class: 'ui', 'font-size': 17, 'font-weight': 600, fill: '#f2a64a' }, map, String(i + 1));
+});
+
+const me = DATA.player.reduce((best, p) => Math.abs(p.t - tEnd) < Math.abs(best.t - tEnd) ? p : best, DATA.player[0]);
+{ const [x, y] = P(me); el('circle', { cx: x, cy: y, r: 16, fill: '#6aa8ff', 'fill-opacity': 0.25, filter: 'url(#glow)' }, map); el('circle', { cx: x, cy: y, r: 6, fill: '#8cbcff' }, map); el('text', { x: x + 14, y: y - 12, class: 'ui', 'font-size': 18, 'font-weight': 600, fill: '#8cbcff' }, map, 'You'); }
+
+// Left panel: title, story, legend
+el('text', { x: 70, y: 120, class: 'h1', 'font-size': 52, fill: '#eef2f8' }, ui, 'STEALTH SENSES');
+el('text', { x: 72, y: 165, class: 'ui', 'font-size': 22, fill: '#9aa6b8' }, ui, 'A real chase, recorded in game');
+let y0 = 240;
+events.forEach((e, i) => {
+  el('circle', { cx: 88, cy: y0 - 6, r: 15, fill: 'none', stroke: '#f2a64a', 'stroke-width': 2 }, ui);
+  el('text', { x: 88, y: y0, 'text-anchor': 'middle', class: 'ui', 'font-size': 15, 'font-weight': 600, fill: '#f2a64a' }, ui, String(i + 1));
+  el('text', { x: 118, y: y0, class: 'ui', 'font-size': 22, 'font-weight': 600, fill: '#eef2f8' }, ui, e.title);
+  // wrap the description to ~44 characters
+  const words = e.text.split(' '); let line = '', ly = y0 + 30;
+  for (const w of words) {
+    if ((line + ' ' + w).trim().length > 44) { el('text', { x: 118, y: ly, class: 'ui', 'font-size': 18, fill: '#aab4c4' }, ui, line.trim()); line = ''; ly += 25; }
+    line += ' ' + w;
+  }
+  el('text', { x: 118, y: ly, class: 'ui', 'font-size': 18, fill: '#aab4c4' }, ui, line.trim());
+  y0 = ly + 52;
+});
+
+// Legend
+const ly = 960;
+const leg = (x, color, op, label) => {
+  const g = el('g', { transform: `translate(${x} ${ly - 6}) rotate(90)` }, ui);
+  el('use', { href: '#boot', x: -5, y: -12, width: 10, height: 24, fill: color, 'fill-opacity': op }, g);
+  el('text', { x: x + 22, y: ly, class: 'ui', 'font-size': 18, fill: '#aab4c4' }, ui, label);
+};
+leg(78, '#e6c995', 0.95, 'Soft ground: clear print');
+const g2 = el('g', { transform: `translate(78 ${ly + 34}) rotate(90)` }, ui);
+el('use', { href: '#boot', x: -5, y: -12, width: 10, height: 24, fill: '#8a93a3', 'fill-opacity': 0.5 }, g2);
+el('text', { x: 100, y: ly + 40, class: 'ui', 'font-size': 18, fill: '#aab4c4' }, ui, 'Rock: faint, read only up close');
+el('line', { x1: 70, y1: ly + 74, x2: 90, y2: ly + 74, stroke: '#f2a64a', 'stroke-width': 3 }, ui);
+el('text', { x: 100, y: ly + 80, class: 'ui', 'font-size': 18, fill: '#aab4c4' }, ui, `Bandit tracking you (${Math.round(tEnd - tStart)} s)`);
+
+// Scale bar (~70 units = 1 m) and north arrow
+const m10 = 700 * scale;
+el('line', { x1: 1840 - m10, y1: 1040, x2: 1840, y2: 1040, stroke: '#aab4c4', 'stroke-width': 2 }, ui);
+el('line', { x1: 1840 - m10, y1: 1034, x2: 1840 - m10, y2: 1046, stroke: '#aab4c4', 'stroke-width': 2 }, ui);
+el('line', { x1: 1840, y1: 1034, x2: 1840, y2: 1046, stroke: '#aab4c4', 'stroke-width': 2 }, ui);
+el('text', { x: 1840 - m10 / 2, y: 1026, 'text-anchor': 'middle', class: 'ui', 'font-size': 16, fill: '#aab4c4' }, ui, '10 m');
+el('path', { d: 'M 1840 70 L 1830 100 L 1840 94 L 1850 100 Z', fill: '#aab4c4' }, ui);
+el('text', { x: 1840, y: 62, 'text-anchor': 'middle', class: 'ui', 'font-size': 16, fill: '#aab4c4' }, ui, 'N');
+</script>
+</body></html>
+
+

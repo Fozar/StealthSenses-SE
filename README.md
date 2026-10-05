@@ -2,7 +2,7 @@
 
 An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns your footprints into evidence. Hostile NPCs who have reason to be suspicious can notice the trail you leave, read it, and follow it — bending down to examine a print, losing it on bare rock, casting around to pick it up again, and eventually walking straight into your hiding place.
 
-> **Status: prototype (0.6.x).** The trail mechanic works and is tested in game on AE 1.6.1170. Expect rough edges and tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record.
+> **Status: early access (0.7.x).** The trail mechanic works and is tested in game on AE 1.6.1170. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
 
 ---
 
@@ -52,7 +52,8 @@ Trackers walk with vanilla AI packages and pathfinding; the plugin only decides 
 
 ## Requirements
 
-- Skyrim Special Edition 1.5.97 or Anniversary Edition 1.6.x (Address Library based). Tested on AE 1.6.1170.
+- Skyrim **Anniversary Edition 1.6.x** — tested on 1.6.1170.
+- Skyrim Special Edition 1.5.97 — expected to work (Address Library based), **not tested**.
 - [SKSE64](https://skse.silverlock.org/) matching your runtime
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
 

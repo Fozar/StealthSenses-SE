@@ -1,0 +1,85 @@
+[center][font=Tahoma][size=5][b]STEALTH SENSES[/b][/size]
+[size=3]YOUR FOOTPRINTS ARE EVIDENCE — SKSE PLUGIN[/size][/font][/center]
+
+[font=Tahoma]In vanilla Skyrim a bandit who loses sight of you forgets you were ever there. Stealth Senses gives the world a memory of where you walked. Every step you take leaves a footprint, and a suspicious enemy who comes across your trail will read it — bend down to look at a print, follow it from one to the next, lose it on bare rock, cast around to pick it up again, and walk right up to the bush you are hiding in.
+
+No .esp. No scripts. No edited records. Vanilla AI does the walking — the plugin only tells it where to look next.[/font]
+
+[font=Tahoma][b]Early access (0.7).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
+
+[font=Tahoma][size=4][b]— Your trail —[/b][/size][/font]
+
+[font=Tahoma][list]
+[*][b]Surface matters[/b] — snow, mud, dirt, sand and grass hold a clear print; gravel less so; stone, wood and ice barely at all.
+[*][b]Prints fade[/b] — a clear print stays readable for several game hours, much less in rain or snow.
+[*][b]Water breaks the trail[/b] — wade through a stream and the trail ends there.
+[*][b]Blood[/b] — get hurt and your next steps leave a trail that lasts much longer.
+[*][b]Saved with your game[/b] — come back later and your old trail is still there (until it fades).
+[/list][/font]
+
+[font=Tahoma][size=4][b]— Who tracks you —[/b][/size][/font]
+
+[font=Tahoma]Not everyone, and not for no reason. An enemy takes up your trail only when:
+[list]
+[*]it has a reason to be suspicious — [b]it lost you in a fight[/b] within the last minute, it [b]almost spotted you[/b], or it is on alert;
+[*]one of your footprints is [b]right in front of it[/b] — a few steps away, inside its field of view;
+[*]it is standing or walking — a sleeping or sitting bandit does not study the floor.
+[/list]
+Only hostile humanoids track. Animals never do (yet).[/font]
+
+[font=Tahoma][size=4][b]— What a tracker does —[/b][/size][/font]
+
+[font=Tahoma][list]
+[*][b]Draws its weapon[/b] and goes on alert.
+[*][b]Follows your prints[/b] — briskly on soft ground, slowly and carefully on rock where it can only read a faint print up close.
+[*][b]Examines a footprint[/b] now and then — bends down to the ground.
+[*][b]Searches[/b] when the trail runs out — stops, looks around, then checks spots around the last print, first in the direction you were heading.
+[*][b]Picks the trail up again[/b] if it finds where it continues.
+[*][b]Gives up[/b] after about 45 seconds without a new print and goes back to its business.
+[*]If it [b]spots you[/b] or a fight starts, the vanilla AI takes over at once.
+[/list][/font]
+
+[font=Tahoma][size=4][b]— Requirements —[/b][/size][/font]
+
+[font=Tahoma][list]
+[*]Skyrim [b]Anniversary Edition 1.6.x[/b] — tested on 1.6.1170
+[*]Skyrim Special Edition 1.5.97 — expected to work, [b]not tested[/b]
+[*][url=https://skse.silverlock.org/]SKSE64[/url] matching your game version
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/32444]Address Library for SKSE Plugins[/url]
+[/list]
+Skyrim VR is not supported.[/font]
+
+[font=Tahoma][size=4][b]— Installation —[/b][/size][/font]
+
+[font=Tahoma]Install with a mod manager, or copy [font=Courier New]SKSE\Plugins\[/font] into your [font=Courier New]Data\[/font] folder. No .esp, no load order.
+
+[b]Removing the mod:[/b] safe mid-playthrough. If you saved while someone was tracking you, load that save once with the mod still installed — it releases the tracker — then remove it.[/font]
+
+[font=Tahoma][size=4][b]— Configuration —[/b][/size][/font]
+
+[font=Tahoma]Everything is tunable in [font=Courier New]Data\SKSE\Plugins\StealthSensesConfig.json[/font]: how fast prints fade, how visible each surface is, how close and how wide an NPC looks, how suspicious it must be, how long it searches, whether trackers draw weapons. Every key is optional; the full list with explanations is in the README on the source page.[/font]
+
+[font=Tahoma][size=4][b]— Compatibility —[/b][/size][/font]
+
+[font=Tahoma][list]
+[*]Works alongside detection and stealth overhauls — it does not change how detection works. Mods that change the stealth meter shift how often enemies become suspicious.
+[*]AI overhauls that aggressively override NPC behavior may fight the tracker; the plugin re-applies its package once per second.
+[*]Safe with any load order — there is no plugin file.
+[/list][/font]
+
+[font=Tahoma][size=4][b]— Known limitations —[/b][/size][/font]
+
+[font=Tahoma][list]
+[*]An enemy can notice a footprint on the other side of a wall if it is right in front of it.
+[*]Trackers do not voice alert lines of their own.
+[*]Animals do not track — planned together with scent.
+[/list][/font]
+
+[font=Tahoma][size=4][b]— Reporting a bug —[/b][/size][/font]
+
+[font=Tahoma][list=1]
+[*]Set [font=Courier New]"telemetry": true[/font] in the [font=Courier New]debug[/font] section of the config.
+[*]Play until it happens and [b]press F7[/b] at that moment — you will see "StealthSenses: Mark 1".
+[*]Send [font=Courier New]StealthSenses.log[/font] and [font=Courier New]StealthSenses.trace.jsonl[/font] from [font=Courier New]Documents\My Games\Skyrim Special Edition\SKSE\[/font], and say what you saw at which mark.
+[/list]
+The trace records your character's position, nearby NPCs and every decision the mod makes — nothing else.[/font]

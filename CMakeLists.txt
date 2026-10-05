@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(StealthSenses VERSION 0.6.2 LANGUAGES CXX)
+project(StealthSenses VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -79,6 +79,7 @@ namespace StealthSenses::Config {
         Read(jk, "sound_level", k.sound_level);
         Read(jk, "max_trackers", k.max_trackers);
         Read(jk, "debug_all_npcs", k.debug_all_npcs);
+        Read(jk, "emit_events", k.emit_events);
 
         auto& d = g_settings.debug;
         const auto& jd = Section(root, "debug");

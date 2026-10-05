@@ -91,7 +91,9 @@ namespace StealthSenses::Trackers {
 
             // [engine_api §2] the event belongs to the source (player): one point at a time
             // for all listeners, which is why Update emits for a single tracker per tick.
-            process->SetActorsDetectionEvent(a_player, a_pending.fp->pos, sound, nullptr);
+            if (cfg.emit_events) {
+                process->SetActorsDetectionEvent(a_player, a_pending.fp->pos, sound, nullptr);
+            }
 
             auto& state     = g_trackers[a_pending.actor->GetFormID()];
             const bool first = state.lastSeq == 0;
@@ -100,10 +102,10 @@ namespace StealthSenses::Trackers {
             state.sinceEmit = 0.0f;
             state.arrived   = false;
 
-            Say(std::format("{} {} footprint #{} dist {:.0f} meter {} alert {} sound {}",
+            Say(std::format("{} {} footprint #{} dist {:.0f} meter {} alert {} sound {}{}",
                 Describe(a_pending.actor), first ? "picked up trail at" : "follows to",
                 a_pending.fp->seq, a_pending.actor->GetPosition().GetDistance(a_pending.fp->pos),
-                a_pending.meter, a_pending.alerted, sound));
+                a_pending.meter, a_pending.alerted, sound, cfg.emit_events ? "" : " (dry run)"));
         }
     }
 
@@ -152,7 +154,8 @@ namespace StealthSenses::Trackers {
 
             if (a_actor->IsInCombat() && !cfg.include_combat) {
                 if (tracked != g_trackers.end()) {
-                    Say(std::format("{} entered combat, stops tracking", Describe(a_actor)));
+                    Say(std::format("{} entered combat {:.1f}s after our point, stops tracking",
+                        Describe(a_actor), tracked->second.sinceEmit + a_deltaSeconds));
                     Remember(id, tracked->second.lastSeq);
                     g_trackers.erase(tracked);
                 }
@@ -169,7 +172,9 @@ namespace StealthSenses::Trackers {
             if (meter >= 100) {
                 // Sees the player: vanilla detection takes over
                 if (tracked != g_trackers.end()) {
-                    Say(std::format("{} detected the player, stops tracking", Describe(a_actor)));
+                    // sinceEmit is how long after our last event — the A/B against emit_events=false
+                    Say(std::format("{} detected the player {:.1f}s after our point, stops tracking",
+                        Describe(a_actor), tracked->second.sinceEmit + a_deltaSeconds));
                     Remember(id, tracked->second.lastSeq);
                     g_trackers.erase(tracked);
                 }

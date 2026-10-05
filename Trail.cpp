@@ -34,10 +34,21 @@ namespace StealthSenses::Trail {
 
         RE::MATERIAL_ID SurfaceUnder(RE::PlayerCharacter* a_player) {
             // [engine_api §6] bhkCharacterController::surfaceMaterial, works indoors too
+            auto material = RE::MATERIAL_ID::kNone;
             if (const auto* controller = a_player->GetCharController()) {
-                return controller->surfaceMaterial;
+                material = controller->surfaceMaterial;
             }
-            return RE::MATERIAL_ID::kNone;
+            // On exterior landscape the controller mostly reports kNone (2nd in-game test:
+            // 384 of 547 footprints). Fall back to the land texture material, as DTD does:
+            // repos/maglarnet_DTD/src/SurfaceProfiles.cpp:658, TES::GetLandMaterialType 13203/13349
+            if (material == RE::MATERIAL_ID::kNone) {
+                const auto* cell = a_player->GetParentCell();
+                const auto* tes  = RE::TES::GetSingleton();
+                if (cell && !cell->IsInteriorCell() && tes) {
+                    material = tes->GetLandMaterialType(a_player->GetPosition());
+                }
+            }
+            return material;
         }
     }
 

@@ -28,7 +28,8 @@
         "include_combat": false,
         "sound_level": "normal",
         "max_trackers": 4,
-        "debug_all_npcs": false
+        "debug_all_npcs": false,
+        "emit_events": true
     },
     "debug": {
         "log_level": "info",

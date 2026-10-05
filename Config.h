@@ -32,6 +32,7 @@ namespace StealthSenses::Config {
         std::string sound_level      = "normal"; // loud | normal | silent | very_loud | quiet
         int         max_trackers     = 4;
         bool        debug_all_npcs   = false;   // every High-process NPC tracks (AI obedience test)
+        bool        emit_events      = true;    // false = dry run: choose points, never call the engine
     };
 
     struct DebugSettings {

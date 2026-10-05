@@ -1,0 +1,128 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@1,500&display=block" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1300px; height: 372px; overflow: hidden; background: #0a101c; }
+  svg { display: block; }
+  .title { font-family: 'Cinzel', Georgia, serif; font-weight: 700; letter-spacing: 0.12em; }
+  .sub { font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; }
+  .small { font-family: 'Cinzel', Georgia, serif; font-weight: 500; letter-spacing: 0.32em; }
+</style></head>
+<body>
+<svg width="1300" height="372" viewBox="0 0 1300 372" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070b15"/>
+      <stop offset="0.38" stop-color="#18233a"/>
+      <stop offset="0.52" stop-color="#4a5c7a"/>
+      <stop offset="1" stop-color="#8195b3"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="1080" cy="20" r="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9fb5d6" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#9fb5d6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lantern" cx="95" cy="300" r="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb453" stop-opacity="0.55"/>
+      <stop offset="0.35" stop-color="#e98a32" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#e98a32" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="80%">
+      <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.6"/>
+    </radialGradient>
+    <filter id="drift" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.0026 0.03" numOctaves="4" seed="11"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.86  0 0 0 0 0.91  0 0 0 0 1  0 0 0 0.45 -0.14"/>
+    </filter>
+    <linearGradient id="groundMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.40" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="0.75" stop-color="#fff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="onGround"><rect width="1300" height="372" fill="url(#groundMask)"/></mask>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.9  0 0 0 0 0.93  0 0 0 0 1  0 0 0 0.07 0"/>
+    </filter>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="0.7"/></filter>
+    <filter id="snowfill" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="haze" x="-5%" y="-20%" width="110%" height="140%"><feGaussianBlur stdDeviation="1.1"/></filter>
+    <linearGradient id="ridgeFade" x1="0" y1="165" x2="0" y2="215" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d2a42"/><stop offset="0.45" stop-color="#2a3a57"/><stop offset="1" stop-color="#4a5c7a" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f5070" stop-opacity="0"/>
+      <stop offset="0.45" stop-color="#55688a" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#5b6f92" stop-opacity="0"/>
+    </linearGradient>
+    <symbol id="boot" viewBox="-17 -43 34 86" overflow="visible">
+      <path d="M -11 -10 C -14 -28 -7 -43 2 -42 C 12 -41 15 -27 12 -9 C 10 3 9 7 9 12 L -9 12 C -9 6 -9 1 -11 -10 Z"/>
+      <path d="M -9 19 C -10 30 -6 42 0 42 C 6 42 10 31 9 19 Z"/>
+    </symbol>
+  </defs>
+
+  <rect width="1300" height="372" fill="url(#ground)"/>
+  <rect width="1300" height="372" fill="url(#moon)"/>
+  <rect width="1300" height="372" filter="url(#drift)" mask="url(#onGround)"/>
+
+  <g filter="url(#haze)" transform="translate(0 -62) scale(0.68 0.5)">
+    <path d="M 0 505 L 60 488 L 95 470 L 120 478 L 175 440 L 205 452 L 250 418 L 290 436 L 318 428 L 372 392 L 400 405 L 432 382 L 470 410 L 520 430 L 575 418 L 610 436 L 668 452 L 720 430 L 760 402 L 790 412 L 835 386 L 880 420 L 930 442 L 990 430 L 1040 412 L 1075 425 L 1130 398 L 1162 380 L 1196 396 L 1250 428 L 1310 446 L 1380 432 L 1450 448 L 1530 438 L 1610 452 L 1700 440 L 1780 456 L 1860 446 L 1920 452 L 1920 520 L 0 520 Z" fill="#2b3a55"/>
+    <path d="M 318 428 L 372 392 L 400 405 L 432 382 L 452 396 L 430 402 L 404 418 L 380 410 L 350 428 Z M 760 402 L 790 412 L 835 386 L 860 404 L 838 400 L 812 420 L 788 418 Z M 1130 398 L 1162 380 L 1196 396 L 1176 398 L 1158 392 L 1142 404 Z" fill="#7d8fae" opacity="0.55"/>
+  </g>
+  <path d="M 0 182 L 80 174 L 150 178 L 230 168 L 310 176 L 380 171 L 470 177 L 560 170 L 650 178 L 740 172 L 830 179 L 940 173 L 1060 180 L 1180 174 L 1300 178 L 1300 215 L 0 215 Z" fill="url(#ridgeFade)" filter="url(#haze)"/>
+  <rect x="0" y="150" width="1300" height="90" fill="url(#mist)"/>
+
+  <path id="route" d="M 40 352 C 200 330, 190 288, 340 280 S 520 296, 570 252 S 545 210, 610 200" fill="none" stroke="none"/>
+  <g id="trail"></g>
+  <g id="hunter"></g>
+
+  <rect width="1300" height="372" fill="url(#lantern)"/>
+  <rect width="1300" height="372" fill="url(#vignette)"/>
+  <rect width="1300" height="372" filter="url(#grain)"/>
+
+  <g transform="translate(965 190)" text-anchor="middle">
+    <text class="small" y="-52" font-size="12" fill="#d6b06e" opacity="0.9">SKSE PLUGIN · SKYRIM SE / AE</text>
+    <text class="title" y="8" font-size="48" fill="#f1f4fa">STEALTH SENSES</text>
+    <line x1="-170" x2="170" y1="30" y2="30" stroke="#d6b06e" stroke-opacity="0.65" stroke-width="1"/>
+    <text class="sub" y="64" font-size="26" fill="#d3dbe8">Your footprints are evidence.</text>
+  </g>
+</svg>
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+const route = document.getElementById('route');
+const len = route.getTotalLength();
+const trail = document.getElementById('trail');
+const start = 110;
+let s = start, i = 0;
+while (s < len - 6) {
+  const p = route.getPointAtLength(s), q = route.getPointAtLength(Math.min(len, s + 3));
+  const depth = 0.45 + 0.55 * (p.y - 200) / (352 - 200);
+  const ang = Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI + 90;
+  const side = i % 2 ? 1 : -1;
+  const nx = -(q.y - p.y), ny = q.x - p.x, nl = Math.hypot(nx, ny) || 1;
+  const x = p.x + nx / nl * 9 * depth * side, y = p.y + ny / nl * 9 * depth * side;
+  const fresh = (s - start) / (len - start);
+  const w = 16 * depth, h = 40 * depth;
+  const g = el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(1)}) scale(${side < 0 ? -1 : 1} 1)` }, trail);
+  el('use', { href: '#boot', x: -w / 2, y: -h / 2, width: w, height: h, fill: '#1a2438', 'fill-opacity': 0.35 + 0.5 * fresh, filter: 'url(#soft)' }, g);
+  el('use', { href: '#boot', x: -w / 2 + 1, y: -h / 2 - 1, width: w - 1.5, height: h - 1.5, fill: '#c9d6ea', 'fill-opacity': 0.12 + 0.45 * (1 - fresh), filter: 'url(#snowfill)' }, g);
+  s += 30 * depth;
+  i++;
+}
+const hunter = document.getElementById('hunter');
+let d = '';
+for (let t = 0; t <= start; t += 4) { const p = route.getPointAtLength(t); d += (t ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1); }
+const h = route.getPointAtLength(start - 26);
+el('path', { d, fill: 'none', stroke: '#ffb453', 'stroke-width': 2, 'stroke-dasharray': '1.5 8', 'stroke-linecap': 'round', 'stroke-opacity': 0.85 }, hunter);
+el('circle', { cx: h.x, cy: h.y, r: 22, fill: '#ffb453', 'fill-opacity': 0.35, filter: 'url(#glow)' }, hunter);
+// hooded figure, scaled down from the cover
+const k = 0.62, fx = h.x - 21, fy = h.y + 4;
+const P = (dx, dy) => `${(fx + dx * k).toFixed(1)} ${(fy + dy * k).toFixed(1)}`;
+el('path', { d: `M ${P(-22, 40)} C ${P(-20, 8)}, ${P(-16, -30)}, ${P(-2, -52)} C ${P(4, -64)}, ${P(18, -64)}, ${P(22, -52)} C ${P(26, -42)}, ${P(22, -34)}, ${P(14, -28)} C ${P(24, -16)}, ${P(32, -6)}, ${P(34, 0)} L ${P(30, 2)} C ${P(22, -6)}, ${P(16, -10)}, ${P(12, -12)} C ${P(16, 6)}, ${P(20, 24)}, ${P(22, 40)} Z`,
+             fill: '#070b14', 'fill-opacity': 0.92 }, hunter);
+el('circle', { cx: h.x, cy: h.y, r: 4.5, fill: '#ffe2b0' }, hunter);
+el('ellipse', { cx: fx, cy: fy + 40 * k, rx: 22, ry: 4, fill: '#070b14', 'fill-opacity': 0.35, filter: 'url(#soft)' }, hunter);
+</script>
+</body></html>
+

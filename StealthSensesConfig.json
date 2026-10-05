@@ -33,6 +33,8 @@
     "debug": {
         "log_level": "info",
         "console": true,
-        "log_footstep_tags": true
+        "log_footstep_tags": true,
+        "telemetry": true,
+        "mark_key": 65
     }
 }

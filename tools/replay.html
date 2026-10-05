@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StealthSenses Replay</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #dcdad4;
+    --player: #2563eb; --target: #9333ea; --mark: #dc2626; --grid: #e9e7e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17171a; --panel: #212125; --text: #ececf0; --muted: #9a9aa3; --line: #34343a;
+      --player: #60a5fa; --target: #c084fc; --mark: #f87171; --grid: #2a2a2f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; }
+  main { display: grid; grid-template-columns: 1fr 380px; height: calc(100vh - 100px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } #map { height: 60vh; } }
+  #map { width: 100%; height: 100%; display: block; cursor: grab; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 10px 12px; }
+  aside h2 { font-size: 13px; margin: 12px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  #timebar { display: flex; gap: 10px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  #time { flex: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td, th { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .log { font: 12px/1.35 ui-monospace, monospace; white-space: pre-wrap; margin: 0; }
+  .log .now { background: color-mix(in srgb, var(--mark) 15%, transparent); }
+  .muted { color: var(--muted); }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  button, select, input[type=file] { font: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>StealthSenses — реплей</h1>
+  <input type="file" id="file" accept=".jsonl,.json,.txt">
+  <label>Сессия <select id="session"></select></label>
+  <label><input type="checkbox" id="trails" checked> пути NPC</label>
+  <label><input type="checkbox" id="allfp"> все следы</label>
+  <span class="muted" id="info">Открой StealthSenses.trace.jsonl (Documents/My Games/Skyrim Special Edition/SKSE)</span>
+</header>
+<div id="timebar">
+  <button id="play">▶</button>
+  <input type="range" id="time" min="0" max="0" step="0.25" value="0">
+  <span id="clock">—</span>
+  <select id="speed"><option>1</option><option selected>4</option><option>10</option></select>×
+</div>
+<main>
+  <canvas id="map"></canvas>
+  <aside>
+    <h2>NPC в этот момент</h2>
+    <table id="npcs"><thead><tr><th></th><th>NPC</th><th>метр</th><th>режим</th><th>пакет</th></tr></thead><tbody></tbody></table>
+    <h2>Метки</h2>
+    <div id="marks" class="muted">—</div>
+    <h2>События (±15 с)</h2>
+    <pre class="log" id="log"></pre>
+  </aside>
+</main>
+<script>
+const palette = ['#e4572e','#17bebb','#ffc914','#76b041','#ff7eb6','#8d6cab','#f08a4b','#3d9970'];
+let sessions = [], S = null, T = 0, playing = false;
+let view = { cx: 0, cy: 0, scale: 0.05 };
+const cv = document.getElementById('map'), ctx = cv.getContext('2d');
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+document.getElementById('file').onchange = async e => {
+  const text = await e.target.files[0].text();
+  parse(text);
+};
+
+function parse(text) {
+  sessions = []; let cur = null;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let r; try { r = JSON.parse(line); } catch { continue; }
+    if (r.type === 'load' || !cur) { cur = { start: r.t, records: [], footprints: new Map(), label: '' }; sessions.push(cur); }
+    if (r.type === 'footprint') cur.footprints.set(r.seq, r);
+    cur.records.push(r);
+  }
+  sessions.forEach((s, i) => {
+    s.t0 = s.records[0].t; s.t1 = s.records[s.records.length - 1].t;
+    s.players = s.records.filter(r => r.type === 'player');
+    s.npcs = new Map();
+    for (const r of s.records.filter(r => r.type === 'npc')) {
+      if (!s.npcs.has(r.id)) s.npcs.set(r.id, { name: r.name, color: palette[s.npcs.size % palette.length], pts: [] });
+      s.npcs.get(r.id).pts.push(r);
+    }
+    s.logs = s.records.filter(r => r.type === 'log' || r.type === 'mark');
+    s.marks = s.records.filter(r => r.type === 'mark');
+    const tracked = [...s.npcs.values()].filter(n => n.pts.some(p => p.track)).length;
+    s.label = `#${i + 1}: ${Math.round(s.t1 - s.t0)} с, NPC ${s.npcs.size}, следопытов ${tracked}, меток ${s.marks.length}`;
+  });
+  const sel = document.getElementById('session');
+  sel.innerHTML = sessions.map((s, i) => `<option value="${i}">${s.label}</option>`).join('');
+  sel.value = sessions.length - 1; pick(sessions.length - 1);
+}
+
+document.getElementById('session').onchange = e => pick(+e.target.value);
+
+function pick(i) {
+  S = sessions[i]; if (!S) return;
+  const range = document.getElementById('time');
+  range.min = S.t0; range.max = S.t1; T = S.t0; range.value = T;
+  fit();
+  document.getElementById('info').textContent = `${S.records.length} записей`;
+  document.getElementById('marks').innerHTML = S.marks.length
+    ? S.marks.map(m => `<button data-t="${m.t}">Метка ${m.n} · ${fmt(m.t - S.t0)}</button>`).join(' ')
+    : '—';
+  document.querySelectorAll('#marks button').forEach(b => b.onclick = () => seek(+b.dataset.t));
+  render();
+}
+
+function fit() {
+  const pts = [...S.players.map(p => p.pos), ...[...S.npcs.values()].flatMap(n => n.pts.map(p => p.pos))];
+  if (!pts.length) return;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  view.cx = (minX + maxX) / 2; view.cy = (minY + maxY) / 2;
+  const r = cv.getBoundingClientRect();
+  view.scale = Math.min(r.width / Math.max(maxX - minX, 500), r.height / Math.max(maxY - minY, 500)) * 0.85;
+}
+
+const toScreen = p => [cv.width / 2 + (p[0] - view.cx) * view.scale * devicePixelRatio,
+                       cv.height / 2 - (p[1] - view.cy) * view.scale * devicePixelRatio];
+
+function at(list, t) { // last record with r.t <= t
+  let lo = 0, hi = list.length - 1, best = null;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (list[m].t <= t) { best = list[m]; lo = m + 1; } else hi = m - 1; }
+  return best;
+}
+
+function render() {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
+  ctx.fillStyle = css('--bg'); ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!S) return;
+  const dpr = devicePixelRatio;
+  const player = at(S.players, T);
+  const space = player ? player.space : null;
+
+  // Grid every 500 units (~7 m)
+  ctx.strokeStyle = css('--grid'); ctx.lineWidth = 1;
+  const step = 500 * view.scale * dpr;
+  if (step > 8) {
+    const [ox, oy] = toScreen([Math.floor(view.cx / 500) * 500, Math.floor(view.cy / 500) * 500]);
+    for (let x = ox % step; x < cv.width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cv.height); ctx.stroke(); }
+    for (let y = oy % step; y < cv.height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke(); }
+  }
+
+  // Footprints: those recorded up to T (or all), alpha = base visibility
+  const showAll = document.getElementById('allfp').checked;
+  for (const fp of S.footprints.values()) {
+    if (space && fp.space !== space) continue;
+    if (!showAll && fp.t > T) continue;
+    const [x, y] = toScreen(fp.pos);
+    ctx.fillStyle = fp.blood ? '#b91c1c' : css('--muted');
+    ctx.globalAlpha = Math.min(1, 0.15 + (fp.base || 0) * 0.85);
+    ctx.beginPath(); ctx.arc(x, y, 2.2 * dpr, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Player path
+  path(S.players.filter(p => p.t <= T).map(p => p.pos), css('--player'), 2);
+  if (player) dot(player.pos, css('--player'), player.sneak ? 5 : 7, player.sneak ? 'крадётся' : '');
+
+  // NPCs
+  const rows = [];
+  for (const [id, n] of S.npcs) {
+    const cur = at(n.pts, T);
+    if (!cur || T - cur.t > 3) continue; // left the High process
+    if (document.getElementById('trails').checked) path(n.pts.filter(p => p.t <= T && p.track).map(p => p.pos), n.color, 1.5);
+    if (cur.track) {
+      const [ax, ay] = toScreen(cur.pos), [bx, by] = toScreen(cur.track.target);
+      ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = css('--target'); ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = css('--target'); ctx.beginPath();
+      ctx.arc(bx, by, (cur.track.mode === 'search' ? 512 * view.scale : 6) * dpr, 0, 7); ctx.stroke();
+    }
+    dot(cur.pos, n.color, cur.track ? 6 : 4, cur.track ? `${n.name} → #${cur.track.seq}` : '');
+    rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}</div></td><td>${cur.meter}</td><td>${cur.track ? cur.track.mode + ' #' + cur.track.seq : '—'}</td><td class="muted">${cur.pkg}</td></tr>`);
+  }
+  document.querySelector('#npcs tbody').innerHTML = rows.join('') || '<tr><td colspan="5" class="muted">нет</td></tr>';
+
+  // Marks
+  for (const m of S.marks) if (m.t <= T && m.pos) dot(m.pos, css('--mark'), 5, `метка ${m.n}`);
+
+  // Events around T
+  const near = S.logs.filter(l => Math.abs(l.t - T) <= 15);
+  document.getElementById('log').innerHTML = near.map(l =>
+    `<div class="${Math.abs(l.t - T) < 1 ? 'now' : ''}">${fmt(l.t - S.t0)}  ${esc(l.type === 'mark' ? '=== МЕТКА ' + l.n + ' ===' : l.text)}</div>`).join('') || '<span class="muted">—</span>';
+  document.getElementById('clock').textContent = `${fmt(T - S.t0)} / ${fmt(S.t1 - S.t0)}`;
+}
+
+function path(pts, color, w) {
+  if (pts.length < 2) return;
+  ctx.strokeStyle = color; ctx.lineWidth = w * devicePixelRatio; ctx.beginPath();
+  pts.forEach((p, i) => { const [x, y] = toScreen(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.stroke();
+}
+function dot(p, color, r, label) {
+  const [x, y] = toScreen(p), dpr = devicePixelRatio;
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 7); ctx.fill();
+  if (label) { ctx.fillStyle = css('--text'); ctx.font = `${11 * dpr}px system-ui`; ctx.fillText(label, x + 8 * dpr, y - 6 * dpr); }
+}
+const fmt = s => { s = Math.max(0, s); return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function seek(t) { T = t; document.getElementById('time').value = t; render(); }
+document.getElementById('time').oninput = e => seek(+e.target.value);
+document.getElementById('trails').onchange = render;
+document.getElementById('allfp').onchange = render;
+document.getElementById('play').onclick = () => {
+  playing = !playing; document.getElementById('play').textContent = playing ? '❚❚' : '▶';
+  let last = performance.now();
+  const tick = now => {
+    if (!playing || !S) return;
+    T = Math.min(S.t1, T + (now - last) / 1000 * +document.getElementById('speed').value); last = now;
+    seek(T); if (T >= S.t1) { playing = false; document.getElementById('play').textContent = '▶'; return; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+};
+
+// Pan & zoom
+let drag = null;
+cv.onmousedown = e => drag = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy };
+window.onmouseup = () => drag = null;
+window.onmousemove = e => {
+  if (!drag) return;
+  view.cx = drag.cx - (e.clientX - drag.x) / view.scale; view.cy = drag.cy + (e.clientY - drag.y) / view.scale; render();
+};
+cv.onwheel = e => { e.preventDefault(); view.scale *= e.deltaY < 0 ? 1.2 : 1 / 1.2; render(); };
+window.onresize = render;
+render();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 #include "Trackers.h"
 
 #include "Config.h"
+#include "Telemetry.h"
 #include "Trail.h"
 
 #include <unordered_set>
@@ -66,8 +67,14 @@ namespace StealthSenses::Trackers {
             return Trail::SpaceOf(a_actor) == a_space;
         }
 
-        void Say(const std::string& a_text) {
+        // Log + telemetry; Say also echoes to the in-game console
+        void Note(const std::string& a_text) {
             SKSE::log::info("{}", a_text);
+            Telemetry::Log(a_text);
+        }
+
+        void Say(const std::string& a_text) {
+            Note(a_text);
             if (Config::Get().debug.console) {
                 if (auto* console = RE::ConsoleLog::GetSingleton()) {
                     console->Print("[StealthSenses] %s", a_text.c_str());
@@ -208,6 +215,13 @@ namespace StealthSenses::Trackers {
             memory.cooldown = std::max(memory.cooldown - a_deltaSeconds, 0.0f);
         }
 
+        if (Telemetry::Enabled()) {
+            Telemetry::Write({ { "type", "player" }, { "pos", Telemetry::Vec(player->GetPosition()) },
+                { "space", Telemetry::Hex(space) }, { "sneak", player->IsSneaking() },
+                { "run", player->IsRunning() }, { "combat", player->IsInCombat() },
+                { "weather", badWeather }, { "readable", readable.size() } });
+        }
+
         std::unordered_set<RE::FormID> seen;
 
         processes->ForEachHighActor([&](RE::Actor* a_actor) {
@@ -217,20 +231,40 @@ namespace StealthSenses::Trackers {
             const auto id      = a_actor->GetFormID();
             const auto tracked = g_trackers.find(id);
 
-            if (a_actor->IsInCombat() && !cfg.include_combat) {
+            const bool combat  = a_actor->IsInCombat();
+            const bool hostile = a_actor->IsHostileToActor(player);
+            const int  meter   = StealthMeter(a_actor, player);
+            const bool alerted = a_actor->GetActorRuntimeData().currentProcess->lowProcessFlags.all(
+                RE::AIProcess::LowProcessFlags::kAlert);
+
+            if (Telemetry::Enabled()) {
+                // State before this tick's decision; the decision itself goes out as a "log" record
+                const auto*    package = a_actor->GetCurrentPackage();
+                const auto*    state   = a_actor->AsActorState();
+                nlohmann::json npc{ { "type", "npc" }, { "id", Telemetry::Hex(id) }, { "name", a_actor->GetName() },
+                    { "pos", Telemetry::Vec(a_actor->GetPosition()) }, { "meter", meter }, { "alert", alerted },
+                    { "combat", combat }, { "hostile", hostile },
+                    { "sitsleep", state ? static_cast<int>(state->GetSitSleepState()) : -1 },
+                    { "pkg", Telemetry::Hex(package ? package->GetFormID() : 0) } };
+                if (tracked != g_trackers.end()) {
+                    const auto& s = tracked->second;
+                    npc["track"] = { { "seq", s.lastSeq }, { "target", Telemetry::Vec(s.target) },
+                        { "mode", s.intended == g_search ? "search" : "travel" }, { "since", s.sinceStep },
+                        { "arrived", s.arrived } };
+                }
+                Telemetry::Write(std::move(npc));
+            }
+
+            if (combat && !cfg.include_combat) {
                 if (tracked != g_trackers.end()) {
                     Drop(a_actor, tracked->second, "entered combat");
                     g_trackers.erase(tracked);
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
             }
-            if (cfg.require_hostile && !a_actor->IsHostileToActor(player)) {
+            if (cfg.require_hostile && !hostile) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
-
-            const int  meter   = StealthMeter(a_actor, player);
-            const bool alerted = a_actor->GetActorRuntimeData().currentProcess->lowProcessFlags.all(
-                RE::AIProcess::LowProcessFlags::kAlert);
 
             if (meter >= 100) {
                 // Sees the player: vanilla detection takes over
@@ -264,7 +298,7 @@ namespace StealthSenses::Trackers {
                     }
                 }
                 if (best) {
-                    SKSE::log::info("{} noticed footprint #{} (meter {}, alert {})", Describe(a_actor), best->seq, meter, alerted);
+                    Note(std::format("{} noticed footprint #{} (meter {}, alert {})", Describe(a_actor), best->seq, meter, alerted));
                     State state;
                     if (Steer(player, a_actor, state, *best)) {
                         g_trackers.emplace(id, std::move(state));
@@ -285,15 +319,15 @@ namespace StealthSenses::Trackers {
                 // and the NPC's own patrol). Put ours back; log only the first time per point.
                 if (!state.packageLost) {
                     state.packageLost = true;
-                    SKSE::log::info("{} package replaced by {:08X} after {:.1f}s, reapplying",
-                        Describe(a_actor), current ? current->GetFormID() : 0, state.sinceStep);
+                    Note(std::format("{} package replaced by {:08X} after {:.1f}s, reapplying",
+                        Describe(a_actor), current ? current->GetFormID() : 0, state.sinceStep));
                 }
                 Apply(a_actor, state.intended);
             }
 
             if (!state.arrived && toTarget <= cfg.arrive_radius) {
                 state.arrived = true;
-                SKSE::log::info("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.sinceStep);
+                Note(std::format("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.sinceStep));
             }
             if (!state.arrived && state.sinceStep < cfg.retarget_seconds) {
                 return RE::BSContainer::ForEachResult::kContinue;
@@ -321,12 +355,12 @@ namespace StealthSenses::Trackers {
             }
             if (next) {
                 if (gap) {
-                    SKSE::log::info("{} picks the trail up again after a gap: #{} -> #{}",
-                        Describe(a_actor), state.lastSeq, next->seq);
+                    Note(std::format("{} picks the trail up again after a gap: #{} -> #{}",
+                        Describe(a_actor), state.lastSeq, next->seq));
                 }
                 if (!state.arrived) {
-                    SKSE::log::info("{} did not reach #{} in {:.1f}s (still {:.0f} away)",
-                        Describe(a_actor), state.lastSeq, state.sinceStep, toTarget);
+                    Note(std::format("{} did not reach #{} in {:.1f}s (still {:.0f} away)",
+                        Describe(a_actor), state.lastSeq, state.sinceStep, toTarget));
                 }
                 Steer(player, a_actor, state, *next);
             } else if (state.sinceStep >= cfg.lost_seconds) {

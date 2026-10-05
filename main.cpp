@@ -1,6 +1,7 @@
 // RE headers must precede <Windows.h>: its macros (MAX_PATH, …) break CommonLib declarations
 #include "Config.h"
 #include "Serialization.h"
+#include "Telemetry.h"
 #include "Trackers.h"
 #include "Trail.h"
 
@@ -89,6 +90,26 @@ namespace {
         }
     };
 
+    // Mark key: the tester flags a moment ("at mark 3 he turned back"); see Telemetry::Mark
+    class InputSink final : public RE::BSTEventSink<RE::InputEvent*> {
+    public:
+        RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_events,
+            RE::BSTEventSource<RE::InputEvent*>*) override {
+            const auto key = static_cast<std::uint32_t>(Config::Get().debug.mark_key);
+            if (!a_events || key == 0) {
+                return RE::BSEventNotifyControl::kContinue;
+            }
+            for (auto* event = *a_events; event; event = event->next) {
+                const auto* button = event->AsButtonEvent();
+                if (button && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard &&
+                    button->GetIDCode() == key && button->IsDown()) {
+                    SKSE::GetTaskInterface()->AddTask([]() { Telemetry::Mark(); });
+                }
+            }
+            return RE::BSEventNotifyControl::kContinue;
+        }
+    };
+
     // Game-thread tick: poll sampler + tracker update. Time spent paused is not counted.
     void Tick() {
         using Clock = std::chrono::steady_clock;
@@ -146,9 +167,15 @@ namespace {
             events->AddEventSink<RE::TESHitEvent>(&sink);
         }
 
+        if (auto* input = RE::BSInputDeviceManager::GetSingleton()) {
+            static InputSink sink;
+            input->AddEventSink(&sink);
+        }
+
         if (!Trackers::Init()) {
             SKSE::log::error("Trackers: vanilla package/keyword/XMarker not found, tracking disabled");
         }
+        Telemetry::Open();
         StartTicker();
     }
 
@@ -159,6 +186,16 @@ namespace {
         Trackers::Clear();
         Trackers::ReleaseStale();
         SKSE::log::info("Game loaded: {} footprints in trail", Trail::Footprints().size());
+
+        // A load starts a new timeline in the trace: the viewer splits sessions on it, and the
+        // restored trail is dumped so footprints from before this run are on the map too
+        Telemetry::Write({ { "type", "load" }, { "footprints", Trail::Footprints().size() } });
+        for (const auto& fp : Trail::Footprints()) {
+            Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(fp.pos) },
+                { "space", Telemetry::Hex(fp.space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(fp.material)) },
+                { "base", Trail::Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & Trail::kBlood) != 0 },
+                { "src", "save" } });
+        }
     }
 }
 

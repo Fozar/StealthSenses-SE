@@ -85,6 +85,8 @@ namespace StealthSenses::Config {
         Read(jd, "log_level", d.log_level);
         Read(jd, "console", d.console);
         Read(jd, "log_footstep_tags", d.log_footstep_tags);
+        Read(jd, "telemetry", d.telemetry);
+        Read(jd, "mark_key", d.mark_key);
 
         // Clamp values that would break the loops below
         t.min_spacing      = std::max(t.min_spacing, 8.0f);

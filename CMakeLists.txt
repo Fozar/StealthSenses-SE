@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(StealthSenses VERSION 0.2.3 LANGUAGES CXX)
+project(StealthSenses VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -86,6 +86,7 @@ add_commonlibsse_plugin(StealthSenses
         Trail.cpp
         Trackers.cpp
         Serialization.cpp
+        Telemetry.cpp
     NAME "StealthSenses"
     VERSION "${PROJECT_VERSION}"
     USE_ADDRESS_LIBRARY

@@ -38,6 +38,8 @@ namespace StealthSenses::Config {
         std::string log_level         = "info";
         bool        console           = true;   // echo tracker decisions to the in-game console
         bool        log_footstep_tags = true;
+        bool        telemetry         = true;   // StealthSenses.trace.jsonl next to the log
+        int         mark_key          = 0x41;   // DirectInput scan code; 0x41 = F7, 0 = off
     };
 
     struct Settings {

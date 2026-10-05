@@ -1,6 +1,7 @@
 #include "Trail.h"
 
 #include "Config.h"
+#include "Telemetry.h"
 
 namespace StealthSenses::Trail {
     namespace {
@@ -120,6 +121,11 @@ namespace StealthSenses::Trail {
         while (g_trail.size() > static_cast<std::size_t>(cfg.max_footprints)) {
             g_trail.pop_front();
         }
+
+        Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(pos) },
+            { "space", Telemetry::Hex(space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(fp.material)) },
+            { "base", Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & kBlood) != 0 },
+            { "src", a_source } });
 
         SKSE::log::trace("Trail: #{} via {} at ({:.0f}, {:.0f}, {:.0f}) space {:08X} material {:08X}{}",
             fp.seq, a_source, pos.x, pos.y, pos.z, space,

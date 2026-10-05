@@ -22,7 +22,21 @@ namespace StealthSenses::Trackers {
             bool                   alerted;
         };
 
-        std::unordered_map<RE::FormID, State> g_trackers;
+        // Survives dropping a tracker: an NPC that lost the trail or saw the player does not
+        // pick it up again right away, and never restarts from a footprint it already had.
+        struct Memory {
+            std::uint32_t lastSeq  = 0;
+            float         cooldown = 0.0f;
+        };
+
+        std::unordered_map<RE::FormID, State>  g_trackers;
+        std::unordered_map<RE::FormID, Memory> g_memory;
+
+        void Remember(RE::FormID a_id, std::uint32_t a_lastSeq) {
+            auto& memory    = g_memory[a_id];
+            memory.lastSeq  = std::max(memory.lastSeq, a_lastSeq);
+            memory.cooldown = Config::Get().tracker.repickup_seconds;
+        }
 
         RE::SOUND_LEVEL ParseSoundLevel(std::string_view a_name) {
             if (a_name == "loud") return RE::SOUND_LEVEL::kLoud;
@@ -122,6 +136,10 @@ namespace StealthSenses::Trackers {
             }
         }
 
+        for (auto& [id, memory] : g_memory) {
+            memory.cooldown = std::max(memory.cooldown - a_deltaSeconds, 0.0f);
+        }
+
         std::unordered_set<RE::FormID> seen;
         std::vector<Pending>           pending;
 
@@ -135,6 +153,7 @@ namespace StealthSenses::Trackers {
             if (a_actor->IsInCombat() && !cfg.include_combat) {
                 if (tracked != g_trackers.end()) {
                     Say(std::format("{} entered combat, stops tracking", Describe(a_actor)));
+                    Remember(id, tracked->second.lastSeq);
                     g_trackers.erase(tracked);
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
@@ -151,6 +170,7 @@ namespace StealthSenses::Trackers {
                 // Sees the player: vanilla detection takes over
                 if (tracked != g_trackers.end()) {
                     Say(std::format("{} detected the player, stops tracking", Describe(a_actor)));
+                    Remember(id, tracked->second.lastSeq);
                     g_trackers.erase(tracked);
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
@@ -164,10 +184,18 @@ namespace StealthSenses::Trackers {
                 if (!suspicious || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
                     return RE::BSContainer::ForEachResult::kContinue;
                 }
-                // Picks up the trail at the nearest readable footprint
+                const auto memory  = g_memory.find(id);
+                const auto skipSeq = memory != g_memory.end() ? memory->second.lastSeq : 0;
+                if (memory != g_memory.end() && memory->second.cooldown > 0.0f) {
+                    return RE::BSContainer::ForEachResult::kContinue;
+                }
+                // Picks up the trail at the nearest readable footprint it has not had yet
                 const Trail::Footprint* best  = nullptr;
                 float                   bestD = cfg.search_radius;
                 for (const auto* fp : readable) {
+                    if (fp->seq <= skipSeq) {
+                        continue;
+                    }
                     const float d = pos.GetDistance(fp->pos);
                     if (d <= bestD) {
                         bestD = d;
@@ -184,6 +212,7 @@ namespace StealthSenses::Trackers {
             state.sinceEmit += a_deltaSeconds;
 
             const float toTarget = pos.GetDistance(state.target);
+            SKSE::log::trace("{} -> #{}: {:.0f} away after {:.1f}s", Describe(a_actor), state.lastSeq, toTarget, state.sinceEmit);
             if (!state.arrived && toTarget <= cfg.arrive_radius) {
                 state.arrived = true;
                 SKSE::log::info("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.sinceEmit);
@@ -208,6 +237,7 @@ namespace StealthSenses::Trackers {
                 pending.push_back({ a_actor, next, state.sinceEmit, meter, alerted });
             } else if (state.sinceEmit >= cfg.lost_seconds) {
                 Say(std::format("{} lost the trail after #{}", Describe(a_actor), state.lastSeq));
+                Remember(id, state.lastSeq);
                 seen.erase(id);
             }
             return RE::BSContainer::ForEachResult::kContinue;
@@ -221,7 +251,16 @@ namespace StealthSenses::Trackers {
         }
     }
 
+    void LogSoundLevels() {
+        using S = RE::SOUND_LEVEL;
+        SKSE::log::info("Sound level values: loud {} normal {} silent {} very_loud {} quiet {}",
+            RE::AIFormulas::GetSoundLevelValue(S::kLoud), RE::AIFormulas::GetSoundLevelValue(S::kNormal),
+            RE::AIFormulas::GetSoundLevelValue(S::kSilent), RE::AIFormulas::GetSoundLevelValue(S::kVeryLoud),
+            RE::AIFormulas::GetSoundLevelValue(S::kQuiet));
+    }
+
     void Clear() {
         g_trackers.clear();
+        g_memory.clear();
     }
 }

@@ -21,11 +21,12 @@
         "arrive_radius": 160.0,
         "retarget_seconds": 12.0,
         "lost_seconds": 30.0,
+        "repickup_seconds": 15.0,
         "min_visibility": 0.2,
         "caution_level": 40,
         "require_hostile": false,
         "include_combat": false,
-        "sound_level": "quiet",
+        "sound_level": "normal",
         "max_trackers": 4,
         "debug_all_npcs": false
     },

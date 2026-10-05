@@ -71,6 +71,7 @@ namespace StealthSenses::Config {
         Read(jk, "arrive_radius", k.arrive_radius);
         Read(jk, "retarget_seconds", k.retarget_seconds);
         Read(jk, "lost_seconds", k.lost_seconds);
+        Read(jk, "repickup_seconds", k.repickup_seconds);
         Read(jk, "min_visibility", k.min_visibility);
         Read(jk, "caution_level", k.caution_level);
         Read(jk, "require_hostile", k.require_hostile);

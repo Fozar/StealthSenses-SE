@@ -24,11 +24,12 @@ namespace StealthSenses::Config {
         float       arrive_radius    = 160.0f;
         float       retarget_seconds = 12.0f;   // give the next point even if the NPC never arrived
         float       lost_seconds     = 30.0f;   // drop the tracker after this long without a new point
+        float       repickup_seconds = 15.0f;   // cooldown after a tracker is dropped
         float       min_visibility   = 0.2f;
         int         caution_level    = 40;      // stealth meter value 0..100 that counts as "suspicious"
         bool        require_hostile  = false;
         bool        include_combat   = false;
-        std::string sound_level      = "quiet"; // loud | normal | silent | very_loud | quiet
+        std::string sound_level      = "normal"; // loud | normal | silent | very_loud | quiet
         int         max_trackers     = 4;
         bool        debug_all_npcs   = false;   // every High-process NPC tracks (AI obedience test)
     };

@@ -49,7 +49,9 @@ namespace {
             const bool isPlayer = a_event->actor.native_handle() == g_playerHandle.load();
             LogTag(a_event, isPlayer);
 
-            if (isPlayer) {
+            // The manager also carries JumpUp/JumpDown and creature breathing tags; only
+            // Foot* (FootLeft, FootSprintRight, FootFront, …) are steps
+            if (isPlayer && a_event->tag.c_str() && std::string_view(a_event->tag.c_str()).starts_with("Foot")) {
                 SKSE::GetTaskInterface()->AddTask([]() {
                     Trail::NoteFootstepEvent();
                     Trail::TryRecord(RE::PlayerCharacter::GetSingleton(), "footstep");
@@ -144,6 +146,7 @@ namespace {
             events->AddEventSink<RE::TESHitEvent>(&sink);
         }
 
+        Trackers::LogSoundLevels();
         StartTicker();
     }
 

@@ -88,11 +88,17 @@ namespace StealthSenses::Trail {
             return;
         }
 
+        // Wading through shallow water (not swimming) washes footprints away too
+        const auto material = SurfaceUnder(a_player);
+        if (material == RE::MATERIAL_ID::kWater) {
+            return;
+        }
+
         Footprint fp;
         fp.pos       = pos;
         fp.space     = space;
         fp.gameHours = calendar->GetHoursPassed();
-        fp.material  = SurfaceUnder(a_player);
+        fp.material  = material;
         fp.seq       = g_nextSeq++;
         if (g_bloodSteps > 0) {
             fp.flags |= kBlood;

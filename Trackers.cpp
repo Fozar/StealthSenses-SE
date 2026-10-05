@@ -472,6 +472,11 @@ namespace StealthSenses::Trackers {
             if (cfg.require_hostile && !hostile) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
+            // Animals hear and see far better (meter 86-98 in test 0.6.0) and count as hostile:
+            // rabbits and deer tailed the player. Creatures come back with scent/sense profiles.
+            if (cfg.humanoids_only && g_humanoid && !a_actor->HasKeyword(g_humanoid)) {
+                return RE::BSContainer::ForEachResult::kContinue;
+            }
 
             if (meter >= 100) {
                 // Sees the player: vanilla detection takes over
@@ -589,7 +594,11 @@ namespace StealthSenses::Trackers {
             const Trail::Footprint* next = nullptr;
             for (const auto& c : candidates) {
                 const auto* fp = c.fp;
-                if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance && readableFrom(c, pos) &&
+                // A faint footprint is also read around the footprint the NPC was sent to: travel
+                // stops ~270 short of it, so measured from the NPC alone the next faint one was
+                // always just out of reach and the tracker stopped at every step (fox, test 0.6.0)
+                const bool readable = readableFrom(c, pos) || state.trailPos.GetDistance(fp->pos) <= cfg.close_read_radius;
+                if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance && readable &&
                     std::abs(fp->pos.z - pos.z) <= kMaxDz && (!next || fp->seq > next->seq)) {
                     next = fp;
                 }

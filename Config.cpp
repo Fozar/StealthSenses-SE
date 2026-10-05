@@ -89,6 +89,7 @@ namespace StealthSenses::Config {
         Read(jk, "caution_level", k.caution_level);
         Read(jk, "after_combat_seconds", k.after_combat_seconds);
         Read(jk, "require_hostile", k.require_hostile);
+        Read(jk, "humanoids_only", k.humanoids_only);
         Read(jk, "include_combat", k.include_combat);
         Read(jk, "max_trackers", k.max_trackers);
 #ifdef STEALTHSENSES_DEV

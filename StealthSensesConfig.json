@@ -39,6 +39,7 @@
         "caution_level": 70,
         "after_combat_seconds": 60.0,
         "require_hostile": true,
+        "humanoids_only": true,
         "include_combat": false,
         "max_trackers": 4
     },

@@ -53,6 +53,7 @@ namespace StealthSenses::Config {
         int         caution_level    = 70;      // stealth meter 0..100 that counts as "suspicious" (baseline near the player is 41-67)
         float       after_combat_seconds = 60.0f; // a hostile that fought the player stays suspicious this long after
         bool        require_hostile  = true;
+        bool        humanoids_only   = true;    // only ActorTypeNPC track (no rabbits on the trail)
         bool        include_combat   = false;
         int         max_trackers     = 4;
         STEALTHSENSES_DEV_SETTING(bool, debug_all_npcs, false, "every High-process NPC tracks (AI obedience test)")

@@ -7,19 +7,28 @@
 
 namespace StealthSenses::Trackers {
     namespace {
-        struct State {
-            std::uint32_t lastSeq   = 0;
-            RE::NiPoint3  target;
-            float         sinceEmit = 0.0f;
-            bool          arrived   = false;
-        };
+        // Skyrim.esm forms, FormIDs read from the record headers of the local Skyrim.esm.
+        // Both packages are PLDT type 6 (linked reference) with the matching keyword:
+        // defaultTravelToLinkCustom02 -> LinkCustom02 (0005D5E7),
+        // defaultTravelToLinkCustom03RunWeaponDrawn -> LinkCustom03 (0005D5E8) [assumed by name]
+        constexpr RE::FormID kWalkPackage = 0x000235E2;
+        constexpr RE::FormID kWalkKeyword = 0x0005D5E7;
+        constexpr RE::FormID kRunPackage  = 0x00023607;
+        constexpr RE::FormID kRunKeyword  = 0x0005D5E8;
+        constexpr RE::FormID kXMarker     = 0x0000003B;
 
-        struct Pending {
-            RE::Actor*             actor;
-            const Trail::Footprint* fp;
-            float                  waited;  // seconds since this tracker's last point
-            int                    meter;
-            bool                   alerted;
+        RE::TESPackage*    g_package = nullptr;
+        RE::BGSKeyword*    g_keyword = nullptr;
+        RE::TESBoundObject* g_xmarker = nullptr;
+
+        struct State {
+            std::uint32_t                 lastSeq   = 0;
+            RE::NiPoint3                  target;
+            float                         sinceStep = 0.0f;
+            bool                          arrived   = false;
+            RE::NiPointer<RE::TESObjectREFR> marker;
+            RE::FormID                    prevLinked = 0;
+            bool                          packageLost = false;
         };
 
         // Survives dropping a tracker: an NPC that lost the trail or saw the player does not
@@ -31,20 +40,7 @@ namespace StealthSenses::Trackers {
 
         std::unordered_map<RE::FormID, State>  g_trackers;
         std::unordered_map<RE::FormID, Memory> g_memory;
-
-        void Remember(RE::FormID a_id, std::uint32_t a_lastSeq) {
-            auto& memory    = g_memory[a_id];
-            memory.lastSeq  = std::max(memory.lastSeq, a_lastSeq);
-            memory.cooldown = Config::Get().tracker.repickup_seconds;
-        }
-
-        RE::SOUND_LEVEL ParseSoundLevel(std::string_view a_name) {
-            if (a_name == "loud") return RE::SOUND_LEVEL::kLoud;
-            if (a_name == "normal") return RE::SOUND_LEVEL::kNormal;
-            if (a_name == "silent") return RE::SOUND_LEVEL::kSilent;
-            if (a_name == "very_loud") return RE::SOUND_LEVEL::kVeryLoud;
-            return RE::SOUND_LEVEL::kQuiet;
-        }
+        std::vector<Binding>                   g_stale;
 
         // RequestDetectionLevel returns < 0 while the target is undetected; MaxsuDetectionMeter
         // maps it to a 0..100 meter as level + 100, and any value >= 0 to 100 (detected).
@@ -81,32 +77,78 @@ namespace StealthSenses::Trackers {
             return std::format("{} [{:08X}]", name && *name ? name : "?", a_actor->GetFormID());
         }
 
-        void Emit(RE::PlayerCharacter* a_player, const Pending& a_pending) {
-            auto* process = a_player->GetActorRuntimeData().currentProcess;
-            if (!process) {
-                return;
-            }
-            const auto& cfg   = Config::Get().tracker;
-            const auto  sound = RE::AIFormulas::GetSoundLevelValue(ParseSoundLevel(cfg.sound_level));
-
-            // [engine_api §2] the event belongs to the source (player): one point at a time
-            // for all listeners, which is why Update emits for a single tracker per tick.
-            if (cfg.emit_events) {
-                process->SetActorsDetectionEvent(a_player, a_pending.fp->pos, sound, nullptr);
-            }
-
-            auto& state     = g_trackers[a_pending.actor->GetFormID()];
-            const bool first = state.lastSeq == 0;
-            state.lastSeq   = a_pending.fp->seq;
-            state.target    = a_pending.fp->pos;
-            state.sinceEmit = 0.0f;
-            state.arrived   = false;
-
-            Say(std::format("{} {} footprint #{} dist {:.0f} meter {} alert {} sound {}{}",
-                Describe(a_pending.actor), first ? "picked up trail at" : "follows to",
-                a_pending.fp->seq, a_pending.actor->GetPosition().GetDistance(a_pending.fp->pos),
-                a_pending.meter, a_pending.alerted, sound, cfg.emit_events ? "" : " (dry run)"));
+        void Remember(RE::FormID a_id, std::uint32_t a_lastSeq) {
+            auto& memory    = g_memory[a_id];
+            memory.lastSeq  = std::max(memory.lastSeq, a_lastSeq);
+            memory.cooldown = Config::Get().tracker.repickup_seconds;
         }
+
+        // Undoes what Steer did: linked ref back, marker gone, normal AI re-evaluated.
+        void Release(RE::Actor* a_actor, RE::TESObjectREFR* a_marker, RE::FormID a_prevLinked) {
+            if (a_actor && g_keyword) {
+                auto* prev = a_prevLinked ? RE::TESForm::LookupByID<RE::TESObjectREFR>(a_prevLinked) : nullptr;
+                // SetLinkedRef(nullptr, kw) is assumed to drop the entry [not verified]
+                a_actor->extraList.SetLinkedRef(prev, g_keyword);
+                a_actor->EvaluatePackage(true, false);
+            }
+            if (a_marker) {
+                a_marker->Disable();
+                a_marker->SetDelete(true);
+            }
+        }
+
+        void Drop(RE::Actor* a_actor, State& a_state, std::string_view a_why) {
+            Say(std::format("{} {} after #{}, stops tracking", Describe(a_actor), a_why, a_state.lastSeq));
+            Remember(a_actor->GetFormID(), a_state.lastSeq);
+            Release(a_actor, a_state.marker.get(), a_state.prevLinked);
+        }
+
+        // Sends the NPC to the footprint: marker on the footprint, NPC linked to it, travel package.
+        void Steer(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state, const Trail::Footprint& a_fp) {
+            if (!a_state.marker) {
+                a_state.marker = a_player->PlaceObjectAtMe(g_xmarker, false);
+                if (!a_state.marker) {
+                    SKSE::log::error("{}: PlaceObjectAtMe(XMarker) failed", Describe(a_actor));
+                    return;
+                }
+                const auto* prev   = a_actor->extraList.GetLinkedRef(g_keyword);
+                a_state.prevLinked = prev ? prev->GetFormID() : 0;
+                a_actor->extraList.SetLinkedRef(a_state.marker.get(), g_keyword);
+            }
+            a_state.marker->SetPosition(a_fp.pos);
+
+            const bool first    = a_state.lastSeq == 0;
+            a_state.lastSeq     = a_fp.seq;
+            a_state.target      = a_fp.pos;
+            a_state.sinceStep   = 0.0f;
+            a_state.arrived     = false;
+            a_state.packageLost = false;
+
+            // Arguments: temp package, not created by us (a vanilla form must not be freed),
+            // allowed to pull the NPC out of furniture. Semantics are not verified [assumption].
+            a_actor->PutCreatedPackage(g_package, true, false, true);
+
+            const auto* current = a_actor->GetCurrentPackage();
+            Say(std::format("{} {} footprint #{} dist {:.0f}, package {:08X}{}",
+                Describe(a_actor), first ? "picked up trail at" : "follows to", a_fp.seq,
+                a_actor->GetPosition().GetDistance(a_fp.pos), current ? current->GetFormID() : 0,
+                current == g_package ? "" : " (not ours!)"));
+        }
+    }
+
+    bool Init() {
+        auto* data = RE::TESDataHandler::GetSingleton();
+        if (!data) {
+            return false;
+        }
+        const bool run = Config::Get().tracker.package_style == "run";
+        g_package      = data->LookupForm<RE::TESPackage>(run ? kRunPackage : kWalkPackage, "Skyrim.esm");
+        g_keyword      = data->LookupForm<RE::BGSKeyword>(run ? kRunKeyword : kWalkKeyword, "Skyrim.esm");
+        g_xmarker      = data->LookupForm<RE::TESBoundObject>(kXMarker, "Skyrim.esm");
+        SKSE::log::info("Trackers: package {:08X} keyword {:08X} xmarker {:08X}",
+            g_package ? g_package->GetFormID() : 0, g_keyword ? g_keyword->GetFormID() : 0,
+            g_xmarker ? g_xmarker->GetFormID() : 0);
+        return g_package && g_keyword && g_xmarker;
     }
 
     void Update(float a_deltaSeconds) {
@@ -115,7 +157,7 @@ namespace StealthSenses::Trackers {
         auto* processes = RE::ProcessLists::GetSingleton();
         auto* calendar  = RE::Calendar::GetSingleton();
         auto* sky       = RE::Sky::GetSingleton();
-        if (!cfg.enabled || !player || !processes || !calendar) {
+        if (!cfg.enabled || !player || !processes || !calendar || !g_package) {
             return;
         }
 
@@ -124,9 +166,9 @@ namespace StealthSenses::Trackers {
             return;
         }
 
-        const float now      = calendar->GetHoursPassed();
-        const auto* cell     = player->GetParentCell();
-        const bool  exterior = cell && !cell->IsInteriorCell();
+        const float now        = calendar->GetHoursPassed();
+        const auto* cell       = player->GetParentCell();
+        const bool  exterior   = cell && !cell->IsInteriorCell();
         const bool  badWeather = exterior && sky && (sky->IsRaining() || sky->IsSnowing());
 
         Trail::Prune(now);
@@ -143,7 +185,6 @@ namespace StealthSenses::Trackers {
         }
 
         std::unordered_set<RE::FormID> seen;
-        std::vector<Pending>           pending;
 
         processes->ForEachHighActor([&](RE::Actor* a_actor) {
             if (!IsCandidate(a_actor, player, space)) {
@@ -154,9 +195,7 @@ namespace StealthSenses::Trackers {
 
             if (a_actor->IsInCombat() && !cfg.include_combat) {
                 if (tracked != g_trackers.end()) {
-                    Say(std::format("{} entered combat {:.1f}s after our point, stops tracking",
-                        Describe(a_actor), tracked->second.sinceEmit + a_deltaSeconds));
-                    Remember(id, tracked->second.lastSeq);
+                    Drop(a_actor, tracked->second, "entered combat");
                     g_trackers.erase(tracked);
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
@@ -172,10 +211,7 @@ namespace StealthSenses::Trackers {
             if (meter >= 100) {
                 // Sees the player: vanilla detection takes over
                 if (tracked != g_trackers.end()) {
-                    // sinceEmit is how long after our last event — the A/B against emit_events=false
-                    Say(std::format("{} detected the player {:.1f}s after our point, stops tracking",
-                        Describe(a_actor), tracked->second.sinceEmit + a_deltaSeconds));
-                    Remember(id, tracked->second.lastSeq);
+                    Drop(a_actor, tracked->second, "detected the player");
                     g_trackers.erase(tracked);
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
@@ -189,44 +225,49 @@ namespace StealthSenses::Trackers {
                 if (!suspicious || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
                     return RE::BSContainer::ForEachResult::kContinue;
                 }
-                const auto memory  = g_memory.find(id);
-                const auto skipSeq = memory != g_memory.end() ? memory->second.lastSeq : 0;
+                const auto memory = g_memory.find(id);
                 if (memory != g_memory.end() && memory->second.cooldown > 0.0f) {
                     return RE::BSContainer::ForEachResult::kContinue;
                 }
-                // Picks up the trail at the nearest readable footprint it has not had yet
-                const Trail::Footprint* best  = nullptr;
-                float                   bestD = cfg.search_radius;
+                const auto skipSeq = memory != g_memory.end() ? memory->second.lastSeq : 0;
+
+                // Notices only a footprint right next to it; follows the freshest one around
+                const Trail::Footprint* best = nullptr;
                 for (const auto* fp : readable) {
-                    if (fp->seq <= skipSeq) {
-                        continue;
-                    }
-                    const float d = pos.GetDistance(fp->pos);
-                    if (d <= bestD) {
-                        bestD = d;
-                        best  = fp;
+                    if (fp->seq > skipSeq && pos.GetDistance(fp->pos) <= cfg.notice_radius &&
+                        (!best || fp->seq > best->seq)) {
+                        best = fp;
                     }
                 }
                 if (best) {
-                    pending.push_back({ a_actor, best, std::numeric_limits<float>::max(), meter, alerted });
+                    SKSE::log::info("{} noticed footprint #{} (meter {}, alert {})", Describe(a_actor), best->seq, meter, alerted);
+                    Steer(player, a_actor, g_trackers[id], *best);
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
             }
 
             auto& state = tracked->second;
-            state.sinceEmit += a_deltaSeconds;
+            state.sinceStep += a_deltaSeconds;
 
+            const auto* current  = a_actor->GetCurrentPackage();
             const float toTarget = pos.GetDistance(state.target);
-            SKSE::log::trace("{} -> #{}: {:.0f} away after {:.1f}s", Describe(a_actor), state.lastSeq, toTarget, state.sinceEmit);
+            SKSE::log::trace("{} -> #{}: {:.0f} away after {:.1f}s, package {:08X}",
+                Describe(a_actor), state.lastSeq, toTarget, state.sinceStep, current ? current->GetFormID() : 0);
+            if (current != g_package && !state.packageLost) {
+                state.packageLost = true;
+                SKSE::log::info("{} package replaced by {:08X} after {:.1f}s",
+                    Describe(a_actor), current ? current->GetFormID() : 0, state.sinceStep);
+            }
+
             if (!state.arrived && toTarget <= cfg.arrive_radius) {
                 state.arrived = true;
-                SKSE::log::info("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.sinceEmit);
+                SKSE::log::info("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.sinceStep);
             }
-            if (!state.arrived && state.sinceEmit < cfg.retarget_seconds) {
+            if (!state.arrived && state.sinceStep < cfg.retarget_seconds) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
 
-            // Next point: the freshest readable footprint ahead on the trail within reach
+            // Next point: the freshest readable footprint ahead on the trail within sight
             const Trail::Footprint* next = nullptr;
             for (const auto* fp : readable) {
                 if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance &&
@@ -237,35 +278,60 @@ namespace StealthSenses::Trackers {
             if (next) {
                 if (!state.arrived) {
                     SKSE::log::info("{} did not reach #{} in {:.1f}s (still {:.0f} away)",
-                        Describe(a_actor), state.lastSeq, state.sinceEmit, toTarget);
+                        Describe(a_actor), state.lastSeq, state.sinceStep, toTarget);
                 }
-                pending.push_back({ a_actor, next, state.sinceEmit, meter, alerted });
-            } else if (state.sinceEmit >= cfg.lost_seconds) {
-                Say(std::format("{} lost the trail after #{}", Describe(a_actor), state.lastSeq));
-                Remember(id, state.lastSeq);
+                Steer(player, a_actor, state, *next);
+            } else if (state.sinceStep >= cfg.lost_seconds) {
+                Drop(a_actor, state, "lost the trail");
                 seen.erase(id);
             }
             return RE::BSContainer::ForEachResult::kContinue;
         });
 
-        std::erase_if(g_trackers, [&](const auto& a_entry) { return !seen.contains(a_entry.first); });
-
-        if (!pending.empty()) {
-            const auto& due = *std::ranges::max_element(pending, {}, &Pending::waited);
-            Emit(player, due);
+        // Trackers that left the High process (or were dropped above): undo and forget
+        for (auto it = g_trackers.begin(); it != g_trackers.end();) {
+            if (seen.contains(it->first)) {
+                ++it;
+                continue;
+            }
+            auto* actor = RE::TESForm::LookupByID<RE::Actor>(it->first);
+            if (actor && it->second.marker) {
+                // Already released by Drop when it got here through "lost the trail"
+                if (!it->second.marker->IsDeleted()) {
+                    Drop(actor, it->second, "left the area");
+                }
+            }
+            it = g_trackers.erase(it);
         }
-    }
-
-    void LogSoundLevels() {
-        using S = RE::SOUND_LEVEL;
-        SKSE::log::info("Sound level values: loud {} normal {} silent {} very_loud {} quiet {}",
-            RE::AIFormulas::GetSoundLevelValue(S::kLoud), RE::AIFormulas::GetSoundLevelValue(S::kNormal),
-            RE::AIFormulas::GetSoundLevelValue(S::kSilent), RE::AIFormulas::GetSoundLevelValue(S::kVeryLoud),
-            RE::AIFormulas::GetSoundLevelValue(S::kQuiet));
     }
 
     void Clear() {
         g_trackers.clear();
         g_memory.clear();
+    }
+
+    std::vector<Binding> Bindings() {
+        std::vector<Binding> result;
+        for (const auto& [id, state] : g_trackers) {
+            if (state.marker) {
+                result.push_back({ id, state.marker->GetFormID(), state.prevLinked });
+            }
+        }
+        return result;
+    }
+
+    void QueueStale(std::vector<Binding> a_bindings) {
+        g_stale = std::move(a_bindings);
+    }
+
+    void ReleaseStale() {
+        for (const auto& binding : g_stale) {
+            auto* actor  = RE::TESForm::LookupByID<RE::Actor>(binding.actor);
+            auto* marker = RE::TESForm::LookupByID<RE::TESObjectREFR>(binding.marker);
+            Release(actor, marker, binding.prevLinked);
+            SKSE::log::info("Released saved tracker binding: actor {:08X} marker {:08X} (found: {}, {})",
+                binding.actor, binding.marker, actor != nullptr, marker != nullptr);
+        }
+        g_stale.clear();
     }
 }

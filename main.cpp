@@ -146,7 +146,9 @@ namespace {
             events->AddEventSink<RE::TESHitEvent>(&sink);
         }
 
-        Trackers::LogSoundLevels();
+        if (!Trackers::Init()) {
+            SKSE::log::error("Trackers: vanilla package/keyword/XMarker not found, tracking disabled");
+        }
         StartTicker();
     }
 
@@ -155,6 +157,7 @@ namespace {
             g_playerHandle = player->GetHandle().native_handle();
         }
         Trackers::Clear();
+        Trackers::ReleaseStale();
         SKSE::log::info("Game loaded: {} footprints in trail", Trail::Footprints().size());
     }
 }

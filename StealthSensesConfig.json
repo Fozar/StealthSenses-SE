@@ -16,7 +16,7 @@
     "tracker": {
         "enabled": true,
         "interval_ms": 1000,
-        "search_radius": 2000.0,
+        "notice_radius": 350.0,
         "lead_distance": 900.0,
         "arrive_radius": 160.0,
         "retarget_seconds": 12.0,
@@ -26,10 +26,9 @@
         "caution_level": 40,
         "require_hostile": false,
         "include_combat": false,
-        "sound_level": "normal",
+        "package_style": "walk",
         "max_trackers": 4,
-        "debug_all_npcs": false,
-        "emit_events": true
+        "debug_all_npcs": false
     },
     "debug": {
         "log_level": "info",

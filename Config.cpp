@@ -66,7 +66,7 @@ namespace StealthSenses::Config {
         const auto& jk = Section(root, "tracker");
         Read(jk, "enabled", k.enabled);
         Read(jk, "interval_ms", k.interval_ms);
-        Read(jk, "search_radius", k.search_radius);
+        Read(jk, "notice_radius", k.notice_radius);
         Read(jk, "lead_distance", k.lead_distance);
         Read(jk, "arrive_radius", k.arrive_radius);
         Read(jk, "retarget_seconds", k.retarget_seconds);
@@ -76,10 +76,9 @@ namespace StealthSenses::Config {
         Read(jk, "caution_level", k.caution_level);
         Read(jk, "require_hostile", k.require_hostile);
         Read(jk, "include_combat", k.include_combat);
-        Read(jk, "sound_level", k.sound_level);
+        Read(jk, "package_style", k.package_style);
         Read(jk, "max_trackers", k.max_trackers);
         Read(jk, "debug_all_npcs", k.debug_all_npcs);
-        Read(jk, "emit_events", k.emit_events);
 
         auto& d = g_settings.debug;
         const auto& jd = Section(root, "debug");

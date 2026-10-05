@@ -19,7 +19,7 @@ namespace StealthSenses::Config {
     struct TrackerSettings {
         bool        enabled          = true;
         int         interval_ms      = 1000;
-        float       search_radius    = 2000.0f; // first footprint must be this close to the NPC
+        float       notice_radius    = 350.0f;  // an NPC notices a footprint only this close
         float       lead_distance    = 900.0f;  // next footprint must be this close to the NPC
         float       arrive_radius    = 160.0f;
         float       retarget_seconds = 12.0f;   // give the next point even if the NPC never arrived
@@ -29,10 +29,9 @@ namespace StealthSenses::Config {
         int         caution_level    = 40;      // stealth meter value 0..100 that counts as "suspicious"
         bool        require_hostile  = false;
         bool        include_combat   = false;
-        std::string sound_level      = "normal"; // loud | normal | silent | very_loud | quiet
+        std::string package_style    = "walk";  // walk | run (run = weapon drawn)
         int         max_trackers     = 4;
         bool        debug_all_npcs   = false;   // every High-process NPC tracks (AI obedience test)
-        bool        emit_events      = true;    // false = dry run: choose points, never call the engine
     };
 
     struct DebugSettings {

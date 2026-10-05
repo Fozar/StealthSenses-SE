@@ -46,7 +46,9 @@ namespace StealthSenses::Config {
         float       stuck_seconds    = 6.0f;    // not moving this long while walking = unreachable point
         float       stuck_give_up    = 20.0f;   // total such time since the last footprint = drop
         float       repickup_seconds = 15.0f;   // cooldown after a tracker is dropped
-        float       min_visibility   = 0.2f;
+        float       min_visibility   = 0.2f;    // clear footprint: read from lead_distance / across gaps
+        float       faint_visibility = 0.1f;    // faint footprint (stone 0.15): read only up close
+        float       close_read_radius = 300.0f; // "up close" for faint footprints
         int         caution_level    = 40;      // stealth meter value 0..100 that counts as "suspicious"
         bool        require_hostile  = false;
         bool        include_combat   = false;

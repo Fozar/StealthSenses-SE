@@ -199,23 +199,18 @@ namespace StealthSenses::Trackers {
                 { "event", a_event }, { "played", accepted } });
         }
 
-        // Papyrus Actor.SetAlert through the VM: vanilla alerted NPCs carry their weapon ready and
-        // voice the alert lines ("Who's there?" — dialogue subtypes ALIL/NOTA/ALTN in Skyrim.esm)
-        // on their own. The engine function behind it has no CommonLib wrapper (AL names only:
-        // Actor::SetIsAlerted 36281/37270, matched by name), so the call goes through the script
-        // VM — whether the lines really play is what the in-game test checks [assumption].
+        // Vanilla alert state (the lowProcessFlags kAlert bit, what Papyrus Actor.SetAlert sets).
+        // Actor::SetIsAlerted — SE 36281 (0x1405D23C0, 1.5.97_comments.csv + offsets-1-5-97-0.csv),
+        // AE 37270 (skyrimae.rename) [matched by name; not in se_ae.csv]. A 0x20-byte function
+        // (IsAlerted follows right after), so a flag setter: void(Actor*, bool) [assumption].
+        // Test 0.5.0: Papyrus SetAlert via VirtualMachine::DispatchMethodCall returned false — a
+        // bandit has no bound script object to dispatch on. Returns whether the flag now matches.
         bool SetAlert(RE::Actor* a_actor, bool a_alert) {
-            auto* vm     = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            auto* policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
-            if (!policy) {
-                return false;
-            }
-            const auto handle = policy->GetHandleForObject(RE::Actor::FORMTYPE, a_actor);
-            if (handle == policy->EmptyHandle()) {
-                return false;
-            }
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-            return vm->DispatchMethodCall(handle, "Actor", "SetAlert", RE::MakeFunctionArguments(std::move(a_alert)), callback);
+            using func_t = void(RE::Actor*, bool);
+            static REL::Relocation<func_t> setIsAlerted{ RELOCATION_ID(36281, 37270) };
+            setIsAlerted(a_actor, a_alert);
+            const auto* process = a_actor->GetActorRuntimeData().currentProcess;
+            return process && process->lowProcessFlags.all(RE::AIProcess::LowProcessFlags::kAlert) == a_alert;
         }
 
         // Closest navmesh point, so search points do not land inside rocks and walls.
@@ -266,7 +261,7 @@ namespace StealthSenses::Trackers {
                 if (Config::Get().tracker.set_alert && a_state.humanoid && hostile) {
                     a_state.alertSet = SetAlert(a_actor, true);
                     Telemetry::Write({ { "type", "alert" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
-                        { "dispatched", a_state.alertSet } });
+                        { "flagSet", a_state.alertSet } });
                 }
             }
 
@@ -391,12 +386,29 @@ namespace StealthSenses::Trackers {
 
         Trail::Prune(now);
 
-        std::vector<const Trail::Footprint*> readable;
+        // Footprints worth a look at all: clear ones (>= min_visibility) are read from afar, faint
+        // ones (>= faint_visibility, e.g. stone at 0.15) only within close_read_radius of the NPC —
+        // in a stone dungeon nothing was readable and trackers only searched (test 0.4.1)
+        struct Candidate {
+            const Trail::Footprint* fp;
+            bool                    clear;
+        };
+        std::vector<Candidate> candidates;
+        std::size_t            clearCount = 0;
         for (const auto& fp : Trail::Footprints()) {
-            if (fp.space == space && Trail::Visibility(fp, now, badWeather) >= cfg.min_visibility) {
-                readable.push_back(&fp);
+            if (fp.space != space) {
+                continue;
+            }
+            const float vis = Trail::Visibility(fp, now, badWeather);
+            if (vis >= cfg.faint_visibility) {
+                const bool clear = vis >= cfg.min_visibility;
+                candidates.push_back({ &fp, clear });
+                clearCount += clear;
             }
         }
+        auto readableFrom = [&](const Candidate& a_c, const RE::NiPoint3& a_npc) {
+            return a_c.clear || a_npc.GetDistance(a_c.fp->pos) <= cfg.close_read_radius;
+        };
 
         for (auto& [id, memory] : g_memory) {
             memory.cooldown = std::max(memory.cooldown - a_deltaSeconds, 0.0f);
@@ -406,7 +418,7 @@ namespace StealthSenses::Trackers {
             Telemetry::Write({ { "type", "player" }, { "pos", Telemetry::Vec(player->GetPosition()) },
                 { "space", Telemetry::Hex(space) }, { "sneak", player->IsSneaking() },
                 { "run", player->IsRunning() }, { "combat", player->IsInCombat() },
-                { "weather", badWeather }, { "readable", readable.size() } });
+                { "weather", badWeather }, { "readable", clearCount }, { "faint", candidates.size() - clearCount } });
         }
 
         std::unordered_set<RE::FormID> seen;
@@ -479,8 +491,9 @@ namespace StealthSenses::Trackers {
 
                 // Notices only a footprint right next to it; follows the freshest one around
                 const Trail::Footprint* best = nullptr;
-                for (const auto* fp : readable) {
-                    if (fp->seq > skipSeq && pos.GetDistance(fp->pos) <= cfg.notice_radius &&
+                for (const auto& c : candidates) {
+                    const auto* fp = c.fp;
+                    if (fp->seq > skipSeq && pos.GetDistance(fp->pos) <= cfg.notice_radius && readableFrom(c, pos) &&
                         (!best || fp->seq > best->seq)) {
                         best = fp;
                     }
@@ -542,16 +555,19 @@ namespace StealthSenses::Trackers {
             // after a gap (e.g. the trail crossed stone) the first one near the last footprint.
             // Footprints on another level are skipped: the straight-line distance lies there.
             const Trail::Footprint* next = nullptr;
-            for (const auto* fp : readable) {
-                if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance &&
+            for (const auto& c : candidates) {
+                const auto* fp = c.fp;
+                if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance && readableFrom(c, pos) &&
                     std::abs(fp->pos.z - pos.z) <= kMaxDz && (!next || fp->seq > next->seq)) {
                     next = fp;
                 }
             }
+            // Across a gap only clear footprints: a faint one is not seen from a distance
             bool gap = false;
             if (!next) {
-                for (const auto* fp : readable) {
-                    if (fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
+                for (const auto& c : candidates) {
+                    const auto* fp = c.fp;
+                    if (c.clear && fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
                         std::abs(fp->pos.z - state.trailPos.z) <= kMaxDz && (!next || fp->seq < next->seq)) {
                         next = fp;
                         gap  = true;
@@ -568,6 +584,13 @@ namespace StealthSenses::Trackers {
                 if (state.sinceStep >= cfg.lost_seconds) {
                     Drop(a_actor, state, "lost the trail");
                     seen.erase(id);
+                } else if (state.hops == 0 && state.mode != Mode::Look) {
+                    // First stop and look around where the trail ends: at the head of a fresh
+                    // trail the next footprint usually appears within seconds, and hopping off at
+                    // once made the tracker dart back and forth every second (test 0.4.1)
+                    SetMode(a_actor, state, Mode::Look);
+                    PlayAnim(a_actor, state, kAnimLook[0]);
+                    Say(std::format("{} stops at #{} and looks around", Describe(a_actor), state.lastSeq));
                 } else {
                     NextHop(a_actor, state);
                 }

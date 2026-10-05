@@ -33,6 +33,8 @@
         "stuck_give_up": 20.0,
         "repickup_seconds": 15.0,
         "min_visibility": 0.2,
+        "faint_visibility": 0.1,
+        "close_read_radius": 300.0,
         "caution_level": 40,
         "require_hostile": false,
         "include_combat": false,

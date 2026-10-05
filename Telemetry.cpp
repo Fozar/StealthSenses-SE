@@ -39,6 +39,17 @@ namespace StealthSenses::Telemetry {
             return;
         }
         g_path = *dir / "StealthSenses.trace.jsonl";
+        // The previous game run survives as .prev: a quick restart used to wipe the trace of the
+        // run that was being reported
+        {
+            auto            prev = g_path;
+            std::error_code ec;
+            prev += ".prev";
+            if (std::filesystem::exists(g_path, ec)) {
+                std::filesystem::remove(prev, ec);
+                std::filesystem::rename(g_path, prev, ec);
+            }
+        }
         g_file.open(g_path, std::ios::out | std::ios::trunc | std::ios::binary);
         g_start = std::chrono::steady_clock::now();
         SKSE::log::info("Telemetry: writing {}", g_path.string());

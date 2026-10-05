@@ -83,6 +83,8 @@ namespace StealthSenses::Config {
         Read(jk, "stuck_give_up", k.stuck_give_up);
         Read(jk, "repickup_seconds", k.repickup_seconds);
         Read(jk, "min_visibility", k.min_visibility);
+        Read(jk, "faint_visibility", k.faint_visibility);
+        Read(jk, "close_read_radius", k.close_read_radius);
         Read(jk, "caution_level", k.caution_level);
         Read(jk, "require_hostile", k.require_hostile);
         Read(jk, "include_combat", k.include_combat);

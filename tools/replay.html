@@ -62,6 +62,8 @@
   </aside>
 </main>
 <script>
+const MODES = { follow: 'идёт по следу', examine: 'осматривает след', hop: 'идёт искать', look: 'оглядывается',
+                travel: 'идёт по следу', search: 'ищет' };
 const palette = ['#e4572e','#17bebb','#ffc914','#76b041','#ff7eb6','#8d6cab','#f08a4b','#3d9970'];
 let sessions = [], S = null, T = 0, playing = false;
 let view = { cx: 0, cy: 0, scale: 0.05 };
@@ -174,15 +176,21 @@ function render() {
     const cur = at(n.pts, T);
     if (!cur || T - cur.t > 3) continue; // left the High process
     if (document.getElementById('trails').checked) path(n.pts.filter(p => p.t <= T && p.track).map(p => p.pos), n.color, 1.5);
+    const mode = cur.track ? (MODES[cur.track.mode] || cur.track.mode) : '';
     if (cur.track) {
       const [ax, ay] = toScreen(cur.pos), [bx, by] = toScreen(cur.track.target);
+      // Search area around the last footprint (0.4.0+: modes hop/look; older traces: "search")
+      if (['hop', 'look', 'search'].includes(cur.track.mode)) {
+        const [cx, cy] = toScreen(cur.track.trail || cur.track.target);
+        ctx.setLineDash([2 * dpr, 6 * dpr]); ctx.strokeStyle = css('--target'); ctx.lineWidth = 1 * dpr;
+        ctx.beginPath(); ctx.arc(cx, cy, 700 * view.scale * dpr, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      }
       ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = css('--target'); ctx.lineWidth = 1.5 * dpr;
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
-      ctx.strokeStyle = css('--target'); ctx.beginPath();
-      ctx.arc(bx, by, (cur.track.mode === 'search' ? 512 * view.scale : 6) * dpr, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, 6 * dpr, 0, 7); ctx.stroke();
     }
-    dot(cur.pos, n.color, cur.track ? 6 : 4, cur.track ? `${n.name} → #${cur.track.seq}` : '');
-    rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}</div></td><td>${cur.meter}</td><td>${cur.track ? cur.track.mode + ' #' + cur.track.seq : '—'}</td><td class="muted">${cur.pkg}</td></tr>`);
+    dot(cur.pos, n.color, cur.track ? 6 : 4, cur.track ? `${n.name}: ${mode} #${cur.track.seq}` : '');
+    rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.weapon ? ' · оружие' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}</div></td><td>${cur.meter}</td><td>${cur.track ? mode + ' #' + cur.track.seq + (cur.track.hops ? ' · точка ' + cur.track.hops : '') : '—'}</td><td class="muted">${cur.pkg}</td></tr>`);
   }
   document.querySelector('#npcs tbody').innerHTML = rows.join('') || '<tr><td colspan="5" class="muted">нет</td></tr>';
 

@@ -28,6 +28,8 @@
         "hop_timeout": 10.0,
         "look_seconds": 4.0,
         "draw_weapon": true,
+        "stuck_seconds": 6.0,
+        "stuck_give_up": 20.0,
         "repickup_seconds": 15.0,
         "min_visibility": 0.2,
         "caution_level": 40,

@@ -31,6 +31,8 @@ namespace StealthSenses::Config {
         float       hop_timeout      = 10.0f;   // give up walking to a search point after this
         float       look_seconds     = 4.0f;    // looks around at each search point
         bool        draw_weapon      = true;    // hostile humanoid trackers draw their weapon
+        float       stuck_seconds    = 6.0f;    // not moving this long while walking = unreachable point
+        float       stuck_give_up    = 20.0f;   // total such time since the last footprint = drop
         float       repickup_seconds = 15.0f;   // cooldown after a tracker is dropped
         float       min_visibility   = 0.2f;
         int         caution_level    = 40;      // stealth meter value 0..100 that counts as "suspicious"

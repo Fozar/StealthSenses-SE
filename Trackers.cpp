@@ -20,20 +20,25 @@ namespace StealthSenses::Trackers {
         constexpr RE::FormID kKeyword       = 0x0005D5E7;
         constexpr RE::FormID kXMarker       = 0x0000003B;
         constexpr RE::FormID kActorTypeNPC  = 0x00013794;
-        // Idles: IdlePickup_Ground (bend to the ground), IdleLookAround, IdleLookFar
-        constexpr RE::FormID kIdleExamine    = 0x00075C3E;
-        constexpr RE::FormID kIdleLookAround = 0x000F5D98;
-        constexpr RE::FormID kIdleLookFar    = 0x00075C62;
 
-        RE::TESPackage*     g_travel     = nullptr;
-        RE::TESPackage*     g_hold       = nullptr;
-        RE::BGSKeyword*     g_keyword    = nullptr;
-        RE::BGSKeyword*     g_humanoid   = nullptr;
-        RE::TESBoundObject* g_xmarker    = nullptr;
-        RE::TESIdleForm*    g_examine    = nullptr;
-        RE::TESIdleForm*    g_lookAround = nullptr;
-        RE::TESIdleForm*    g_lookFar    = nullptr;
-        bool                g_ready      = false;
+        // Animation graph events of humanoid idles (ENAM of the IDLE records in Skyrim.esm, all on
+        // Actors\Character\Behaviors\0_Master.hkx). AIProcess::PlayIdle with the IDLE forms returned
+        // false every time in test 0.4.0 (their conditions; IdleLookAround is even a hagraven idle),
+        // so the events go straight to the graph.
+        constexpr const char* kAnimExamine = "IdlePickup_Ground";  // bends to the ground
+        constexpr const char* kAnimLook[]  = { "IdleLookFar", "IdleExamine" };
+
+        RE::TESPackage*     g_travel   = nullptr;
+        RE::TESPackage*     g_hold     = nullptr;
+        RE::BGSKeyword*     g_keyword  = nullptr;
+        RE::BGSKeyword*     g_humanoid = nullptr;
+        RE::TESBoundObject* g_xmarker  = nullptr;
+        bool                g_ready    = false;
+
+        // Height difference beyond which a footprint or search point counts as another level
+        constexpr float kMaxDz = 300.0f;
+        // Movement below this per tick counts as standing still
+        constexpr float kStillStep = 30.0f;
 
         std::mt19937 g_rng{ std::random_device{}() };
 
@@ -61,6 +66,9 @@ namespace StealthSenses::Trackers {
             float                            examineCooldown = 0.0f;
             int                              hops       = 0;
             bool                             arrived    = false;
+            RE::NiPoint3                     lastPos;           // NPC position last tick
+            float                            stillTime  = 0.0f; // standing still while it should walk
+            float                            stuckTotal = 0.0f; // all such time since the last footprint
             bool                             humanoid   = false;
             RE::NiPointer<RE::TESObjectREFR> marker;
             RE::FormID                       prevLinked  = 0;
@@ -170,17 +178,37 @@ namespace StealthSenses::Trackers {
             a_state.modeTime    = 0.0f;
             a_state.arrived     = false;
             a_state.packageLost = false;
+            a_state.stillTime   = 0.0f;
             Apply(a_actor, PackageFor(a_mode));
         }
 
-        void PlayIdle(RE::Actor* a_actor, const State& a_state, RE::TESIdleForm* a_idle) {
-            if (!a_state.humanoid || !a_idle) {
+        void PlayAnim(RE::Actor* a_actor, const State& a_state, const char* a_event) {
+            if (!a_state.humanoid) {
                 return;
             }
-            auto*      process = a_actor->GetActorRuntimeData().currentProcess;
-            const bool played  = process && process->PlayIdle(a_actor, a_idle, nullptr);
+            const bool accepted = a_actor->NotifyAnimationGraph(a_event);
             Telemetry::Write({ { "type", "idle" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
-                { "idle", Telemetry::Hex(a_idle->GetFormID()) }, { "played", played } });
+                { "event", a_event }, { "played", accepted } });
+        }
+
+        // Closest navmesh point, so search points do not land inside rocks and walls.
+        // Pathing::GetPathingCell 29866/30682 + FindClosestPointOnNavmesh 29832/30648 [CL; no
+        // open-source plugin calls them, result is checked by telemetry]
+        std::optional<RE::NiPoint3> SnapToNavmesh(RE::Actor* a_actor, const RE::NiPoint3& a_point) {
+            auto* pathing = RE::Pathing::GetSingleton();
+            auto* cell    = a_actor->GetParentCell();
+            if (!pathing || !cell) {
+                return std::nullopt;
+            }
+            RE::BSTSmartPointer<RE::BSPathingCell> pathingCell;
+            if (!pathing->GetPathingCell(a_point, cell, a_actor->GetWorldspace(), pathingCell) || !pathingCell) {
+                return std::nullopt;
+            }
+            RE::NiPoint3 out;
+            if (!pathing->FindClosestPointOnNavmesh(pathingCell, a_point, out)) {
+                return std::nullopt;
+            }
+            return out;
         }
 
         void MoveMarker(State& a_state, const RE::NiPoint3& a_pos) {
@@ -219,10 +247,12 @@ namespace StealthSenses::Trackers {
             }
 
             MoveMarker(a_state, a_fp.pos);
-            a_state.lastSeq   = a_fp.seq;
-            a_state.trailPos  = a_fp.pos;
-            a_state.sinceStep = 0.0f;
-            a_state.hops      = 0;
+            a_state.lastSeq    = a_fp.seq;
+            a_state.trailPos   = a_fp.pos;
+            a_state.sinceStep  = 0.0f;
+            a_state.stuckTotal = 0.0f;
+            a_state.hops       = 0;
+            a_state.lastPos    = a_actor->GetPosition();
             SetMode(a_actor, a_state, Mode::Follow);
 
             Say(std::format("{} {} footprint #{} dist {:.0f}", Describe(a_actor),
@@ -232,21 +262,54 @@ namespace StealthSenses::Trackers {
 
         // The trail ran out: walk to points around the last footprint, biased along the trail
         // direction at first and wider with every hop, and look around at each.
+        // Search points are at least this far from the NPC: travel packages stop ~270 short of the
+        // marker, so a closer point meant two steps and "arrived" (test 0.4.0)
+        constexpr float kMinHopWalk = 450.0f;
+
         void NextHop(RE::Actor* a_actor, State& a_state) {
             const auto& cfg = Config::Get().tracker;
             ++a_state.hops;
             const float spread  = std::min(50.0f * a_state.hops, 180.0f) * std::numbers::pi_v<float> / 180.0f;
             const float heading = a_state.heading.Length() > 0.5f ? std::atan2(a_state.heading.y, a_state.heading.x)
                                                                    : std::uniform_real_distribution<float>(-3.14159f, 3.14159f)(g_rng);
-            const float angle   = heading + std::uniform_real_distribution<float>(-spread, spread)(g_rng);
-            const float dist    = std::uniform_real_distribution<float>(250.0f, std::max(cfg.search_radius, 300.0f))(g_rng);
+            const auto  npcPos  = a_actor->GetPosition();
 
-            RE::NiPoint3 point = a_state.trailPos;
-            point.x += std::cos(angle) * dist;
-            point.y += std::sin(angle) * dist;
+            // A few random candidates; the first one on the navmesh, on this level and far enough
+            // from the NPC wins, otherwise the farthest snapped one, otherwise the last raw one
+            RE::NiPoint3 point;
+            bool         snapped = false, good = false;
+            float        bestWalk = -1.0f;
+            for (int attempt = 0; attempt < 8 && !good; ++attempt) {
+                const float angle = heading + std::uniform_real_distribution<float>(-spread, spread)(g_rng);
+                const float dist  = std::uniform_real_distribution<float>(300.0f, std::max(cfg.search_radius, 400.0f))(g_rng);
+                RE::NiPoint3 raw  = a_state.trailPos;
+                raw.x += std::cos(angle) * dist;
+                raw.y += std::sin(angle) * dist;
+
+                const auto onMesh = SnapToNavmesh(a_actor, raw);
+                const auto cand   = onMesh.value_or(raw);
+                if (std::abs(cand.z - a_state.trailPos.z) > kMaxDz) {
+                    continue;
+                }
+                const float walk = cand.GetDistance(npcPos);
+                if (onMesh && walk > bestWalk) {
+                    bestWalk = walk;
+                    point    = cand;
+                    snapped  = true;
+                    good     = walk >= kMinHopWalk;
+                } else if (!snapped) {
+                    point = cand;
+                }
+            }
+            if (point == RE::NiPoint3{}) {
+                point = a_state.trailPos;
+            }
+
             MoveMarker(a_state, point);
             SetMode(a_actor, a_state, Mode::Hop);
-            Say(std::format("{} searches around #{}: hop {} ({:.0f} away from it)", Describe(a_actor), a_state.lastSeq, a_state.hops, dist));
+            Say(std::format("{} searches around #{}: hop {} ({:.0f} from it, {:.0f} to walk{})", Describe(a_actor),
+                a_state.lastSeq, a_state.hops, point.GetDistance(a_state.trailPos), point.GetDistance(npcPos),
+                snapped ? "" : ", not on navmesh"));
         }
     }
 
@@ -259,19 +322,16 @@ namespace StealthSenses::Trackers {
         g_hold       = data->LookupForm<RE::TESPackage>(kHoldPackage, "Skyrim.esm");
         g_keyword    = data->LookupForm<RE::BGSKeyword>(kKeyword, "Skyrim.esm");
         g_humanoid   = data->LookupForm<RE::BGSKeyword>(kActorTypeNPC, "Skyrim.esm");
-        g_examine    = data->LookupForm<RE::TESIdleForm>(kIdleExamine, "Skyrim.esm");
-        g_lookAround = data->LookupForm<RE::TESIdleForm>(kIdleLookAround, "Skyrim.esm");
-        g_lookFar    = data->LookupForm<RE::TESIdleForm>(kIdleLookFar, "Skyrim.esm");
         // 0x3B is a hardcoded engine form below 0x800: LookupForm(…, "Skyrim.esm") returns
         // null for it (in-game test 0.2.0), the global lookup finds it
         if (auto* form = RE::TESForm::LookupByID(kXMarker)) {
             g_xmarker = form->As<RE::TESBoundObject>();
         }
-        SKSE::log::info("Trackers: travel {:08X} hold {:08X} keyword {:08X} xmarker {:08X} idles {} {} {}",
+        SKSE::log::info("Trackers: travel {:08X} hold {:08X} keyword {:08X} xmarker {:08X} humanoid {:08X}",
             g_travel ? g_travel->GetFormID() : 0, g_hold ? g_hold->GetFormID() : 0,
             g_keyword ? g_keyword->GetFormID() : 0, g_xmarker ? g_xmarker->GetFormID() : 0,
-            g_examine != nullptr, g_lookAround != nullptr, g_lookFar != nullptr);
-        // Idles and the humanoid keyword are cosmetic: missing ones only skip the animation
+            g_humanoid ? g_humanoid->GetFormID() : 0);
+        // The humanoid keyword is cosmetic: without it no animations play
         g_ready = g_travel && g_hold && g_keyword && g_xmarker;
         return g_ready;
     }
@@ -427,12 +487,31 @@ namespace StealthSenses::Trackers {
                 }
             }
 
+            // Standing still while it should be walking: the point is unreachable (another level,
+            // behind a wall) — test 0.4.0 had a tracker frozen for 40 s while targets kept coming
+            const bool  walking = state.mode == Mode::Follow || state.mode == Mode::Hop;
+            const float moved   = pos.GetDistance(state.lastPos);
+            state.lastPos       = pos;
+            if (walking && !state.arrived && moved < kStillStep) {
+                state.stillTime += a_deltaSeconds;
+                state.stuckTotal += a_deltaSeconds;
+            } else {
+                state.stillTime = 0.0f;
+            }
+            if (state.stuckTotal >= cfg.stuck_give_up) {
+                Drop(a_actor, state, std::format("got stuck ({:.0f}s without moving)", state.stuckTotal));
+                seen.erase(id);
+                return RE::BSContainer::ForEachResult::kContinue;
+            }
+            const bool stuck = walking && state.stillTime >= cfg.stuck_seconds;
+
             // Continuation of the trail: the freshest readable footprint ahead within sight, or
-            // after a gap (e.g. the trail crossed stone) the first one near the last footprint
+            // after a gap (e.g. the trail crossed stone) the first one near the last footprint.
+            // Footprints on another level are skipped: the straight-line distance lies there.
             const Trail::Footprint* next = nullptr;
             for (const auto* fp : readable) {
                 if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance &&
-                    (!next || fp->seq > next->seq)) {
+                    std::abs(fp->pos.z - pos.z) <= kMaxDz && (!next || fp->seq > next->seq)) {
                     next = fp;
                 }
             }
@@ -440,7 +519,7 @@ namespace StealthSenses::Trackers {
             if (!next) {
                 for (const auto* fp : readable) {
                     if (fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
-                        (!next || fp->seq < next->seq)) {
+                        std::abs(fp->pos.z - state.trailPos.z) <= kMaxDz && (!next || fp->seq < next->seq)) {
                         next = fp;
                         gap  = true;
                     }
@@ -463,11 +542,17 @@ namespace StealthSenses::Trackers {
 
             switch (state.mode) {
             case Mode::Follow:
-                if (state.arrived && state.humanoid && state.examineCooldown <= 0.0f) {
+                if (stuck) {
+                    // Can't get to this footprint: search from here instead of taking the next one,
+                    // which is usually behind the same obstacle
+                    Note(std::format("{} can't reach #{} ({:.0f} away, not moving {:.0f}s), searches instead",
+                        Describe(a_actor), state.lastSeq, toTarget, state.stillTime));
+                    searchOrGiveUp();
+                } else if (state.arrived && state.humanoid && state.examineCooldown <= 0.0f) {
                     // Bends down to read the footprint before going on
                     state.examineCooldown = cfg.examine_every;
                     SetMode(a_actor, state, Mode::Examine);
-                    PlayIdle(a_actor, state, g_examine);
+                    PlayAnim(a_actor, state, kAnimExamine);
                     Say(std::format("{} examines footprint #{}", Describe(a_actor), state.lastSeq));
                 } else if (state.arrived || state.modeTime >= cfg.retarget_seconds) {
                     if (!state.arrived) {
@@ -496,9 +581,13 @@ namespace StealthSenses::Trackers {
                     follow();
                 } else if (state.sinceStep >= cfg.lost_seconds) {
                     searchOrGiveUp();
+                } else if (stuck) {
+                    Note(std::format("{} can't reach search point {} ({:.0f} away), next one",
+                        Describe(a_actor), state.hops, toTarget));
+                    NextHop(a_actor, state);
                 } else if (state.arrived || state.modeTime >= cfg.hop_timeout) {
                     SetMode(a_actor, state, Mode::Look);
-                    PlayIdle(a_actor, state, state.hops % 2 ? g_lookAround : g_lookFar);
+                    PlayAnim(a_actor, state, kAnimLook[state.hops % std::size(kAnimLook)]);
                 }
                 break;
             case Mode::Look:

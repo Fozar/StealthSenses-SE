@@ -78,6 +78,8 @@ namespace StealthSenses::Config {
         Read(jk, "hop_timeout", k.hop_timeout);
         Read(jk, "look_seconds", k.look_seconds);
         Read(jk, "draw_weapon", k.draw_weapon);
+        Read(jk, "stuck_seconds", k.stuck_seconds);
+        Read(jk, "stuck_give_up", k.stuck_give_up);
         Read(jk, "repickup_seconds", k.repickup_seconds);
         Read(jk, "min_visibility", k.min_visibility);
         Read(jk, "caution_level", k.caution_level);

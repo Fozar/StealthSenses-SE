@@ -22,10 +22,14 @@ No .esp. No scripts. No edited records. Vanilla AI does the walking — the plug
 [font=Tahoma]Not everyone, and not for no reason. An enemy takes up your trail only when:
 [list]
 [*]it has a reason to be suspicious — [b]it lost you in a fight[/b] within the last minute, it [b]almost spotted you[/b], or it is on alert;
-[*]one of your footprints is [b]right in front of it[/b] — a few steps away, inside its field of view;
+[*]one of your footprints is [b]right in front of it[/b] — a few steps away, inside its field of view, not behind a wall;
 [*]it is standing or walking — a sleeping or sitting bandit does not study the floor.
 [/list]
 Only hostile humanoids track. Animals never do (yet).[/font]
+
+[font=Tahoma][size=4][b]— Bodies —[/b][/size][/font]
+
+[font=Tahoma]Leave a body where its friends will find it, and they come looking for you. A bandit who finds a fellow bandit you killed — sees the body, or heard the kill and has finished its vanilla search — walks over to it, looks around and searches the area, and takes up your trail if it is there. A dead mudcrab, a comrade killed by wolves or a day-old body sends no one after you.[/font]
 
 [font=Tahoma][size=4][b]— What a tracker does —[/b][/size][/font]
 
@@ -35,7 +39,7 @@ Only hostile humanoids track. Animals never do (yet).[/font]
 [*][b]Examines a footprint[/b] now and then — bends down to the ground.
 [*][b]Searches[/b] when the trail runs out — stops, looks around, then checks spots around the last print, first in the direction you were heading.
 [*][b]Picks the trail up again[/b] if it finds where it continues.
-[*][b]Gives up[/b] after about 45 seconds without a new print and goes back to its business.
+[*][b]Gives up[/b] after about 45 seconds without a new print and goes back to its business — and after a few minutes of chasing, or once far from home, however fresh your prints are.
 [*]If it [b]spots you[/b] or a fight starts, the vanilla AI takes over at once.
 [/list][/font]
 
@@ -57,7 +61,7 @@ Skyrim VR is not supported.[/font]
 
 [font=Tahoma][size=4][b]— Configuration —[/b][/size][/font]
 
-[font=Tahoma]Everything is tunable in [font=Courier New]Data\SKSE\Plugins\StealthSensesConfig.json[/font]: how fast prints fade, how visible each surface is, how close and how wide an NPC looks, how suspicious it must be, how long it searches, whether trackers draw weapons. Every key is optional; the full list with explanations is in the README on the source page.[/font]
+[font=Tahoma]Everything is tunable in [font=Courier New]Data\SKSE\Plugins\StealthSensesConfig.json[/font]: how fast prints fade, how visible each surface is, how close and how wide an NPC looks, how suspicious it must be, how long it searches, whether trackers draw weapons. Every key is optional; the full list with explanations is in the [url=https://github.com/Fozar/StealthSenses-SE#configuration]README on GitHub[/url].[/font]
 
 [font=Tahoma][size=4][b]— Compatibility —[/b][/size][/font]
 

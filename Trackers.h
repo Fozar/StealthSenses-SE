@@ -27,16 +27,32 @@ namespace StealthSenses::Trackers {
         RE::FormID prevLinked = 0;  // what the NPC was linked to with our keyword before
     };
 
+    // A victim of the player, remembered so its own who see the body look for the trail.
+    struct KnownBody {
+        RE::FormID corpse = 0;
+        float      diedAt = 0.0f;  // Calendar::GetHoursPassed() at death
+    };
+    using BodySeen = std::pair<RE::FormID, RE::FormID>;  // (NPC, corpse): already reacted
+
     // Looks up the vanilla package, keyword and XMarker; needs data loaded.
     bool Init();
 
     // Called every Config tracker.interval_ms of unpaused play.
     void Update(float a_deltaSeconds);
 
+    // From TESDeathEvent (via AddTask): remembers the body if the player, its follower or its
+    // summon was the killer, so NPCs of the same faction who see it become suspicious.
+    void NoteKill(RE::FormID a_corpse, RE::FormID a_killer);
+
     // Forgets trackers without touching the engine (revert/load: actors may be gone).
     void Clear();
 
     std::vector<Binding> Bindings();
+
+    // Co-save: the player's victims and who already reacted to them.
+    std::vector<KnownBody> Bodies();
+    std::vector<BodySeen>  BodiesSeen();
+    void                   RestoreBodies(std::vector<KnownBody> a_bodies, std::vector<BodySeen> a_seen);
 
     // Bindings read from the co-save; undone by ReleaseStale once the game is loaded.
     void QueueStale(std::vector<Binding> a_bindings);

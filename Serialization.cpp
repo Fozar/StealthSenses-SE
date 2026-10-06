@@ -16,6 +16,7 @@
 
 #include "Serialization.h"
 
+#include "CoSaveFormat.h"
 #include "Trackers.h"
 #include "Trail.h"
 
@@ -26,122 +27,30 @@ namespace StealthSenses::Serialization {
         constexpr std::uint32_t kTrailVersion   = 1;
         constexpr std::uint32_t kBindingRecord  = 'TRKB';
         constexpr std::uint32_t kBindingVersion = 1;
+        constexpr std::uint32_t kBodyRecord     = 'BODY';
+        constexpr std::uint32_t kBodyVersion    = 1;
 
-        // Fixed on-disk layout; never store pointers or handles
-        #pragma pack(push, 1)
-        struct SavedFootprint {
-            float         x, y, z;
-            std::uint32_t space;
-            float         gameHours;
-            std::uint32_t material;
-            std::uint8_t  flags;
-        };
-        #pragma pack(pop)
-        static_assert(sizeof(SavedFootprint) == 25);
-
-        struct SavedBinding {
-            std::uint32_t actor;
-            std::uint32_t marker;
-            std::uint32_t prevLinked;
-        };
-        static_assert(sizeof(SavedBinding) == 12);
-
-        void SaveTrail(SKSE::SerializationInterface* a_intfc) {
-            const auto& trail = Trail::Footprints();
-            if (!a_intfc->OpenRecord(kTrailRecord, kTrailVersion)) {
-                SKSE::log::error("Serialization: cannot open trail record");
-                return;
-            }
-            const auto count = static_cast<std::uint32_t>(trail.size());
-            a_intfc->WriteRecordData(count);
-            for (const auto& fp : trail) {
-                const SavedFootprint saved{
-                    fp.pos.x, fp.pos.y, fp.pos.z, fp.space, fp.gameHours,
-                    static_cast<std::uint32_t>(fp.material), fp.flags
-                };
-                a_intfc->WriteRecordData(saved);
-            }
-            SKSE::log::info("Serialization: saved {} footprints", count);
-        }
-
-        // Trackers change linked refs and place markers; the save keeps those changes,
-        // so the bindings go to the co-save and are undone after load.
-        void SaveBindings(SKSE::SerializationInterface* a_intfc) {
-            const auto bindings = Trackers::Bindings();
-            if (!a_intfc->OpenRecord(kBindingRecord, kBindingVersion)) {
-                SKSE::log::error("Serialization: cannot open binding record");
-                return;
-            }
-            const auto count = static_cast<std::uint32_t>(bindings.size());
-            a_intfc->WriteRecordData(count);
-            for (const auto& b : bindings) {
-                a_intfc->WriteRecordData(SavedBinding{ b.actor, b.marker, b.prevLinked });
-            }
-            if (count) {
-                SKSE::log::info("Serialization: saved {} tracker bindings", count);
-            }
-        }
-
-        void LoadTrail(SKSE::SerializationInterface* a_intfc) {
-            std::uint32_t count = 0;
-            if (a_intfc->ReadRecordData(count) != sizeof(count)) {
-                SKSE::log::error("Serialization: truncated trail record");
-                return;
-            }
-            std::uint32_t restored = 0;
-            for (std::uint32_t i = 0; i < count; ++i) {
-                SavedFootprint saved{};
-                if (a_intfc->ReadRecordData(saved) != sizeof(saved)) {
-                    SKSE::log::error("Serialization: truncated footprint {}/{}", i, count);
-                    break;
-                }
-                // Load order may have changed since the save
-                RE::FormID space = 0;
-                if (!a_intfc->ResolveFormID(saved.space, space)) {
-                    continue;
-                }
-                Trail::Footprint fp;
-                fp.pos       = { saved.x, saved.y, saved.z };
-                fp.space     = space;
-                fp.gameHours = saved.gameHours;
-                fp.material  = static_cast<RE::MATERIAL_ID>(saved.material);
-                fp.flags     = saved.flags;
-                Trail::Restore(fp);
-                ++restored;
-            }
-            SKSE::log::info("Serialization: restored {}/{} footprints", restored, count);
-        }
-
-        void LoadBindings(SKSE::SerializationInterface* a_intfc) {
-            std::uint32_t count = 0;
-            if (a_intfc->ReadRecordData(count) != sizeof(count)) {
-                SKSE::log::error("Serialization: truncated binding record");
-                return;
-            }
-            std::vector<Trackers::Binding> bindings;
-            for (std::uint32_t i = 0; i < count; ++i) {
-                SavedBinding saved{};
-                if (a_intfc->ReadRecordData(saved) != sizeof(saved)) {
-                    SKSE::log::error("Serialization: truncated binding {}/{}", i, count);
-                    break;
-                }
-                Trackers::Binding b;
-                if (!a_intfc->ResolveFormID(saved.actor, b.actor)) {
-                    continue;
-                }
-                // Markers are created refs (0xFF......); a failed resolve just skips the cleanup
-                a_intfc->ResolveFormID(saved.marker, b.marker);
-                if (saved.prevLinked) {
-                    a_intfc->ResolveFormID(saved.prevLinked, b.prevLinked);
-                }
-                bindings.push_back(b);
-            }
-            Trackers::QueueStale(std::move(bindings));
-        }
-
+        // Record layouts are in CoSaveFormat.h (unit-tested); this file opens the records and
+        // moves data between them and Trail / Trackers.
         void OnSave(SKSE::SerializationInterface* a_intfc) {
-            SaveTrail(a_intfc);
-            SaveBindings(a_intfc);
+            if (a_intfc->OpenRecord(kTrailRecord, kTrailVersion)) {
+                CoSave::WriteTrail(*a_intfc, Trail::Footprints());
+                SKSE::log::info("Serialization: saved {} footprints", Trail::Footprints().size());
+            } else {
+                SKSE::log::error("Serialization: cannot open trail record");
+            }
+            // Trackers change linked refs and place markers; the save keeps those changes, so the
+            // bindings go to the co-save and are undone after load.
+            if (a_intfc->OpenRecord(kBindingRecord, kBindingVersion)) {
+                CoSave::WriteBindings(*a_intfc, Trackers::Bindings());
+            } else {
+                SKSE::log::error("Serialization: cannot open binding record");
+            }
+            if (a_intfc->OpenRecord(kBodyRecord, kBodyVersion)) {
+                CoSave::WriteBodies(*a_intfc, { Trackers::Bodies(), Trackers::BodiesSeen() });
+            } else {
+                SKSE::log::error("Serialization: cannot open body record");
+            }
         }
 
         void OnLoad(SKSE::SerializationInterface* a_intfc) {
@@ -151,9 +60,16 @@ namespace StealthSenses::Serialization {
             std::uint32_t type, version, length;
             while (a_intfc->GetNextRecordInfo(type, version, length)) {
                 if (type == kTrailRecord && version == kTrailVersion) {
-                    LoadTrail(a_intfc);
+                    const auto footprints = CoSave::ReadTrail(*a_intfc);
+                    for (const auto& fp : footprints) {
+                        Trail::Restore(fp);
+                    }
+                    SKSE::log::info("Serialization: restored {} footprints", footprints.size());
                 } else if (type == kBindingRecord && version == kBindingVersion) {
-                    LoadBindings(a_intfc);
+                    Trackers::QueueStale(CoSave::ReadBindings(*a_intfc));
+                } else if (type == kBodyRecord && version == kBodyVersion) {
+                    auto bodies = CoSave::ReadBodies(*a_intfc);
+                    Trackers::RestoreBodies(std::move(bodies.bodies), std::move(bodies.seen));
                 } else {
                     SKSE::log::warn("Serialization: record {:08X} v{} unsupported, skipped", type, version);
                 }

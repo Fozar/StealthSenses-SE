@@ -22,6 +22,7 @@
 
 #include <numbers>
 #include <random>
+#include <set>
 #include <unordered_set>
 
 namespace StealthSenses::Trackers {
@@ -90,6 +91,8 @@ namespace StealthSenses::Trackers {
             RE::NiPointer<RE::TESObjectREFR> marker;
             RE::FormID                       prevLinked  = 0;
             bool                             packageLost = false;
+            float                            total      = 0.0f; // since it started tracking: gets tired
+            RE::NiPoint3                     startPos;          // where it started: leash
         };
 
         // Survives dropping a tracker: an NPC that lost the trail or saw the player does not
@@ -104,6 +107,14 @@ namespace StealthSenses::Trackers {
         // Hostile NPCs that were in combat recently (seconds left): once the fight ends without
         // the player found, the NPC stays suspicious and takes up a trail it comes across
         std::unordered_map<RE::FormID, float>  g_recentCombat;
+        // NPCs that found the body of one of their own killed by the player (seconds left): suspicious
+        std::unordered_map<RE::FormID, float>  g_foundBody;
+        // Bodies of the player's victims (from TESDeathEvent) with the game hour of death, until
+        // older than body_max_age_hours, disabled or deleted. Saved in the co-save.
+        std::vector<KnownBody>                 g_bodies;
+        // (NPC, corpse) pairs: each body is found once per NPC. Saved too, or a loaded game would
+        // send every NPC to bodies it already searched around.
+        std::set<std::pair<RE::FormID, RE::FormID>> g_bodiesSeen;
         std::vector<Binding>                   g_stale;
         bool                                   g_sightTested = false;
 
@@ -148,17 +159,25 @@ namespace StealthSenses::Trackers {
             return std::format("{} [{:08X}]", name && *name ? name : "?", a_actor->GetFormID());
         }
 
-        void Remember(RE::FormID a_id, std::uint32_t a_lastSeq) {
-            auto& memory    = g_memory[a_id];
-            memory.lastSeq  = std::max(memory.lastSeq, a_lastSeq);
-            memory.cooldown = Config::Get().tracker.repickup_seconds;
+        // The player, someone it commands (a summon) or its follower
+        bool IsPlayerSide(RE::Actor* a_actor, RE::PlayerCharacter* a_player) {
+            return a_actor && (a_actor == a_player || a_actor->GetCommandingActor().get() == a_player ||
+                                  a_actor->IsPlayerTeammate());
         }
 
-        const Trail::Footprint* FindBySeq(std::uint32_t a_seq) {
-            // seq grows along the deque, with gaps where Prune and thinning removed footprints
-            const auto& trail = Trail::Footprints();
-            const auto  it    = std::ranges::lower_bound(trail, a_seq, {}, &Trail::Footprint::seq);
-            return it != trail.end() && it->seq == a_seq ? &*it : nullptr;
+        // One of its own: the corpse is in a faction the NPC is in too (rank >= 0) — bandit and
+        // bandit, guard and a citizen of the same hold. A dead mudcrab is nobody's own.
+        // [assumption: good enough, tune by test]
+        bool IsOwn(RE::Actor* a_actor, RE::Actor* a_corpse) {
+            return a_corpse->VisitFactions([&](RE::TESFaction* a_faction, std::int8_t a_rank) {
+                return a_faction && a_rank >= 0 && a_actor->IsInFaction(a_faction);
+            });
+        }
+
+        void Remember(RE::FormID a_id, std::uint32_t a_lastSeq, float a_cooldown) {
+            auto& memory    = g_memory[a_id];
+            memory.lastSeq  = std::max(memory.lastSeq, a_lastSeq);
+            memory.cooldown = a_cooldown;
         }
 
         // Undoes what Steer did: linked ref back, marker gone, normal AI re-evaluated.
@@ -177,9 +196,10 @@ namespace StealthSenses::Trackers {
 
         bool SetAlert(RE::Actor* a_actor, bool a_alert);
 
-        void Drop(RE::Actor* a_actor, State& a_state, std::string_view a_why) {
+        // a_cooldown: seconds before it may take up a trail again; repickup_seconds when omitted
+        void Drop(RE::Actor* a_actor, State& a_state, std::string_view a_why, std::optional<float> a_cooldown = {}) {
             Say(std::format("{} {} after #{}, stops tracking", Describe(a_actor), a_why, a_state.lastSeq));
-            Remember(a_actor->GetFormID(), a_state.lastSeq);
+            Remember(a_actor->GetFormID(), a_state.lastSeq, a_cooldown.value_or(Config::Get().tracker.repickup_seconds));
             Release(a_actor, a_state.marker.get(), a_state.prevLinked);
             // Gave up calmly: back to normal (vanilla may say an alert-to-normal line). In combat or
             // after spotting the player the alert belongs to vanilla now.
@@ -312,40 +332,110 @@ namespace StealthSenses::Trackers {
             return result;
         }
 
+        // Does the NPC see the body of one of its own the player killed? Our own perception, like
+        // footprints: within body_notice_radius, in the view cone, line of sight to it.
+        struct Body {
+            RE::Actor*   actor;
+            RE::NiPoint3 pos;
+        };
+
+        RE::Actor* SeesOwnBody(RE::Actor* a_actor, const std::vector<Body>& a_bodies) {
+            const auto& cfg = Config::Get().tracker;
+            const auto  pos = a_actor->GetPosition();
+            for (const auto& body : a_bodies) {
+                if (pos.GetDistance(body.pos) > cfg.body_notice_radius ||
+                    a_actor->GetHeadingAngle(body.pos, true) > cfg.notice_fov * 0.5f ||
+                    g_bodiesSeen.contains({ a_actor->GetFormID(), body.actor->GetFormID() }) || !IsOwn(a_actor, body.actor)) {
+                    continue;
+                }
+                // A blocked look is in the "sight" record of the ray; "body" only when found
+                if (CanSee(a_actor, body.pos) != Sight::Blocked) {
+                    Telemetry::Write({ { "type", "body" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
+                        { "corpse", Telemetry::Hex(body.actor->GetFormID()) }, { "dist", pos.GetDistance(body.pos) },
+                        { "via", "sight" } });
+                    g_bodiesSeen.emplace(a_actor->GetFormID(), body.actor->GetFormID());
+                    return body.actor;
+                }
+            }
+            return nullptr;
+        }
+
+        // Does the NPC already know of such a body? MiddleHighProcessData::deadDetectList [CL] holds
+        // the dead the NPC learned of: test 0.8 — the body was in it from the moment of the kill
+        // (heard, before any sight of it) to the end of the run, and it stayed empty for a bandit
+        // that never noticed the death. Checked when vanilla's own search is over (combat NPCs are
+        // not looked at), so the NPC goes on to the body instead of returning to its post.
+        // Only fresh victims we remember (a_bodies: killed by the player within body_max_age_hours)
+        // and within body_know_radius — no walk across the whole dungeon to a body it heard of.
+        RE::Actor* KnowsOwnBody(RE::Actor* a_actor, const std::vector<Body>& a_bodies) {
+            const auto* process = a_actor->GetActorRuntimeData().currentProcess;
+            if (!process || !process->middleHigh) {
+                return nullptr;
+            }
+            const auto& cfg = Config::Get().tracker;
+            for (const auto& handle : process->middleHigh->deadDetectList) {
+                const auto corpse = handle.get();
+                if (!corpse || g_bodiesSeen.contains({ a_actor->GetFormID(), corpse->GetFormID() })) {
+                    continue;
+                }
+                const auto body = std::ranges::find(a_bodies, corpse.get(), &Body::actor);
+                if (body == a_bodies.end() || a_actor->GetPosition().GetDistance(body->pos) > cfg.body_know_radius ||
+                    !IsOwn(a_actor, corpse.get())) {
+                    continue;
+                }
+                g_bodiesSeen.emplace(a_actor->GetFormID(), corpse->GetFormID());
+                Telemetry::Write({ { "type", "body" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
+                    { "corpse", Telemetry::Hex(corpse->GetFormID()) }, { "dist", a_actor->GetPosition().GetDistance(body->pos) },
+                    { "via", "deadList" } });
+                return corpse.get();
+            }
+            return nullptr;
+        }
+
         void MoveMarker(State& a_state, const RE::NiPoint3& a_pos) {
             a_state.target = a_pos;
             a_state.marker->SetPosition(a_pos);
         }
 
-        // Sends the NPC to the footprint: marker on the footprint, NPC linked to it, travel package.
+        // Takes the NPC over the first time: marker placed, NPC linked to it, weapon drawn, alert.
         // False if the marker could not be placed; the caller must not keep the state then.
+        bool Attach(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state) {
+            if (a_state.marker) {
+                return true;
+            }
+            a_state.marker = a_player->PlaceObjectAtMe(g_xmarker, false);
+            if (!a_state.marker) {
+                SKSE::log::error("{}: PlaceObjectAtMe(XMarker) failed", Describe(a_actor));
+                return false;
+            }
+            a_state.startPos   = a_actor->GetPosition();
+            const auto* prev   = a_actor->extraList.GetLinkedRef(g_keyword);
+            a_state.prevLinked = prev ? prev->GetFormID() : 0;
+            a_actor->extraList.SetLinkedRef(a_state.marker.get(), g_keyword);
+            a_state.humanoid = g_humanoid && a_actor->HasKeyword(g_humanoid);
+
+            // A hunter with a weapon in hand reads as "tracking someone" at a glance
+            const bool hostile = a_actor->IsHostileToActor(a_player);
+            if (Config::Get().tracker.draw_weapon && a_state.humanoid && hostile) {
+                a_actor->DrawWeaponMagicHands(true);
+            }
+            if (Config::Get().tracker.set_alert && a_state.humanoid && hostile) {
+                a_state.alertSet = SetAlert(a_actor, true);
+                Telemetry::Write({ { "type", "alert" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
+                    { "flagSet", a_state.alertSet } });
+            }
+            return true;
+        }
+
+        // Sends the NPC to the footprint: marker on the footprint, travel package.
         bool Steer(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state, const Trail::Footprint& a_fp) {
             const bool first = a_state.lastSeq == 0;
-            if (!a_state.marker) {
-                a_state.marker = a_player->PlaceObjectAtMe(g_xmarker, false);
-                if (!a_state.marker) {
-                    SKSE::log::error("{}: PlaceObjectAtMe(XMarker) failed", Describe(a_actor));
-                    return false;
-                }
-                const auto* prev   = a_actor->extraList.GetLinkedRef(g_keyword);
-                a_state.prevLinked = prev ? prev->GetFormID() : 0;
-                a_actor->extraList.SetLinkedRef(a_state.marker.get(), g_keyword);
-                a_state.humanoid = g_humanoid && a_actor->HasKeyword(g_humanoid);
-
-                // A hunter with a weapon in hand reads as "tracking someone" at a glance
-                const bool hostile = a_actor->IsHostileToActor(a_player);
-                if (Config::Get().tracker.draw_weapon && a_state.humanoid && hostile) {
-                    a_actor->DrawWeaponMagicHands(true);
-                }
-                if (Config::Get().tracker.set_alert && a_state.humanoid && hostile) {
-                    a_state.alertSet = SetAlert(a_actor, true);
-                    Telemetry::Write({ { "type", "alert" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
-                        { "flagSet", a_state.alertSet } });
-                }
+            if (!Attach(a_player, a_actor, a_state)) {
+                return false;
             }
 
             // Trail direction at this footprint, from the footprint before it
-            if (const auto* prev = FindBySeq(a_fp.seq - 1)) {
+            if (const auto* prev = Trail::FindBySeq(a_fp.seq - 1)) {
                 auto dir = a_fp.pos - prev->pos;
                 dir.z    = 0.0f;
                 if (const float len = dir.Length(); len > 1.0f) {
@@ -364,6 +454,26 @@ namespace StealthSenses::Trackers {
 
             Say(std::format("{} {} footprint #{} dist {:.0f}", Describe(a_actor),
                 first ? "picked up trail at" : "follows to", a_fp.seq, a_actor->GetPosition().GetDistance(a_fp.pos)));
+            return true;
+        }
+
+        // Found the body of one of its own: walks over to it as to a search point. On the way and
+        // there the usual search runs — a footprint close by is taken up (lastSeq 0: any of the
+        // player's), otherwise it looks around and searches points around the body, and gives up
+        // after lost_seconds.
+        bool Investigate(RE::PlayerCharacter* a_player, RE::Actor* a_actor, State& a_state, const RE::NiPoint3& a_pos) {
+            if (!Attach(a_player, a_actor, a_state)) {
+                return false;
+            }
+            MoveMarker(a_state, a_pos);
+            a_state.trailPos   = a_pos;
+            a_state.heading    = {};
+            a_state.sinceStep  = 0.0f;
+            a_state.stuckTotal = 0.0f;
+            a_state.hops       = 0;
+            a_state.lastPos    = a_actor->GetPosition();
+            SetMode(a_actor, a_state, Mode::Hop);
+            Say(std::format("{} goes to the body, dist {:.0f}", Describe(a_actor), a_actor->GetPosition().GetDistance(a_pos)));
             return true;
         }
 
@@ -477,6 +587,22 @@ namespace StealthSenses::Trackers {
 
         Trail::Prune(now, cfg.faint_visibility);
 
+        // The player's victims lying here now; gone and old ones are forgotten (an old body is no
+        // news, and the footprints around it have faded anyway)
+        std::vector<Body> bodies;
+        std::erase_if(g_bodies, [&](const KnownBody& a_body) {
+            auto* corpse = RE::TESForm::LookupByID<RE::Actor>(a_body.corpse);
+            if (!corpse || corpse->IsDeleted() || corpse->IsDisabled() || !corpse->IsDead() ||
+                now - a_body.diedAt > cfg.body_max_age_hours) {
+                std::erase_if(g_bodiesSeen, [&](const BodySeen& a_seen) { return a_seen.second == a_body.corpse; });
+                return true;
+            }
+            if (Trail::SpaceOf(corpse) == space && corpse->Is3DLoaded()) {
+                bodies.push_back({ corpse, corpse->GetPosition() });
+            }
+            return false;
+        });
+
         // Footprints worth a look at all: clear ones (>= min_visibility) are read from afar, faint
         // ones (>= faint_visibility, e.g. stone at 0.15) only within close_read_radius of the NPC —
         // in a stone dungeon nothing was readable and trackers only searched (test 0.4.1)
@@ -501,10 +627,18 @@ namespace StealthSenses::Trackers {
             return a_c.clear || a_npc.GetDistance(a_c.fp->pos) <= cfg.close_read_radius;
         };
 
-        for (auto& [id, memory] : g_memory) {
+        // A memory is kept while its cooldown runs or its last footprint is still in the trail;
+        // after that it means nothing (every footprint left is newer) — without this the map grew
+        // with every NPC that ever tracked, until the next load
+        const auto& trail    = Trail::Footprints();
+        const auto  oldest   = trail.empty() ? std::numeric_limits<std::uint32_t>::max() : trail.front().seq;
+        std::erase_if(g_memory, [&](auto& a_entry) {
+            auto& memory    = a_entry.second;
             memory.cooldown = std::max(memory.cooldown - a_deltaSeconds, 0.0f);
-        }
+            return memory.cooldown <= 0.0f && memory.lastSeq < oldest;
+        });
         std::erase_if(g_recentCombat, [&](auto& a_entry) { return (a_entry.second -= a_deltaSeconds) <= 0.0f; });
+        std::erase_if(g_foundBody, [&](auto& a_entry) { return (a_entry.second -= a_deltaSeconds) <= 0.0f; });
 
         if (Telemetry::Enabled()) {
             Telemetry::Write({ { "type", "player" }, { "pos", Telemetry::Vec(player->GetPosition()) },
@@ -534,10 +668,14 @@ namespace StealthSenses::Trackers {
                 const auto*    state   = a_actor->AsActorState();
                 nlohmann::json npc{ { "type", "npc" }, { "id", Telemetry::Hex(id) }, { "name", a_actor->GetName() },
                     { "pos", Telemetry::Vec(a_actor->GetPosition()) }, { "meter", meter }, { "alert", alerted },
-                    { "combat", combat }, { "hostile", hostile }, { "afterFight", g_recentCombat.contains(id) },
+                    { "combat", combat }, { "hostile", hostile }, { "afterFight", g_recentCombat.contains(id) }, { "foundBody", g_foundBody.contains(id) },
                     { "sitsleep", state ? static_cast<int>(state->GetSitSleepState()) : -1 },
                     { "weapon", state && state->IsWeaponDrawn() },
                     { "pkg", Telemetry::Hex(package ? package->GetFormID() : 0) } };
+                // Vanilla "dead bodies this NPC detected" list, to learn what fills it
+                if (const auto* mh = a_actor->GetActorRuntimeData().currentProcess->middleHigh; mh && !mh->deadDetectList.empty()) {
+                    npc["deadList"] = mh->deadDetectList.size();
+                }
                 if (tracked != g_trackers.end()) {
                     const auto& s = tracked->second;
                     npc["track"] = { { "seq", s.lastSeq }, { "target", Telemetry::Vec(s.target) },
@@ -565,6 +703,19 @@ namespace StealthSenses::Trackers {
             if (cfg.humanoids_only && g_humanoid && !a_actor->HasKeyword(g_humanoid)) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
+            std::optional<RE::NiPoint3> bodyPos;
+            if (cfg.body_found_seconds > 0.0f) {
+                auto* corpse = SeesOwnBody(a_actor, bodies);
+                const bool saw = corpse != nullptr;
+                if (!corpse) {
+                    corpse = KnowsOwnBody(a_actor, bodies);
+                }
+                if (corpse) {
+                    g_foundBody[id] = cfg.body_found_seconds;
+                    bodyPos         = corpse->GetPosition();
+                    Say(std::format("{} {} the body of {}", Describe(a_actor), saw ? "found" : "knows of", Describe(corpse)));
+                }
+            }
 
             if (meter >= 100) {
                 // Sees the player: vanilla detection takes over
@@ -578,13 +729,22 @@ namespace StealthSenses::Trackers {
             seen.insert(id);
             const auto pos = a_actor->GetPosition();
 
+            if (tracked == g_trackers.end() && bodyPos && g_trackers.size() < static_cast<std::size_t>(cfg.max_trackers)) {
+                // Just found a body: goes to it and searches from there
+                State state;
+                if (Investigate(player, a_actor, state, *bodyPos)) {
+                    g_trackers.emplace(id, std::move(state));
+                }
+                return RE::BSContainer::ForEachResult::kContinue;
+            }
             if (tracked == g_trackers.end()) {
                 // Why it would look for a trail at all. The stealth meter alone is a poor signal: any
                 // hostile within ~2000 units sits at 41+ and within 500 at 59-67 with nothing going on
                 // (tests 0.5.x), so caution_level is set above that; losing the player in a fight is
-                // the strong trigger
+                // the strong trigger, and so is finding the body of one of its own the player killed
                 const bool afterFight = g_recentCombat.contains(id);
-                const bool suspicious = cfg.debug_all_npcs || alerted || afterFight || meter >= cfg.caution_level;
+                const bool foundBody  = g_foundBody.contains(id);
+                const bool suspicious = cfg.debug_all_npcs || alerted || afterFight || foundBody || meter >= cfg.caution_level;
                 if (!suspicious || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
                     return RE::BSContainer::ForEachResult::kContinue;
                 }
@@ -632,7 +792,7 @@ namespace StealthSenses::Trackers {
                         { "picked", best != nullptr } });
                 }
                 if (best) {
-                    Note(std::format("{} noticed footprint #{} (meter {}, alert {}, after fight {})", Describe(a_actor), best->seq, meter, alerted, afterFight));
+                    Note(std::format("{} noticed footprint #{} (meter {}, alert {}, after fight {}, found body {})", Describe(a_actor), best->seq, meter, alerted, afterFight, foundBody));
                     State state;
                     if (Steer(player, a_actor, state, *best)) {
                         g_trackers.emplace(id, std::move(state));
@@ -644,7 +804,22 @@ namespace StealthSenses::Trackers {
             auto& state = tracked->second;
             state.sinceStep += a_deltaSeconds;
             state.modeTime += a_deltaSeconds;
+            state.total += a_deltaSeconds;
             state.examineCooldown = std::max(state.examineCooldown - a_deltaSeconds, 0.0f);
+
+            // Enough is enough: a long chase however fresh the trail, or too far from where it
+            // started (bandits do not leave their camp for the horizon). Without these a tracker
+            // fed with new footprints followed for good. The longer cooldown keeps it from taking
+            // the same chase up again a moment later.
+            const float fromStart = pos.GetDistance(state.startPos);
+            if (state.total >= cfg.give_up_seconds || fromStart >= cfg.leash_distance) {
+                Drop(a_actor, state,
+                    state.total >= cfg.give_up_seconds ? std::format("got tired ({:.0f}s on the trail)", state.total)
+                                                       : std::format("went too far ({:.0f} from where it started)", fromStart),
+                    cfg.tired_cooldown);
+                seen.erase(id);
+                return RE::BSContainer::ForEachResult::kContinue;
+            }
 
             const auto* current = a_actor->GetCurrentPackage();
             if (current != PackageFor(state.mode)) {
@@ -801,21 +976,56 @@ namespace StealthSenses::Trackers {
                 ++it;
                 continue;
             }
-            auto* actor = RE::TESForm::LookupByID<RE::Actor>(it->first);
-            if (actor && it->second.marker) {
-                // Already released by Drop when it got here through "lost the trail"
-                if (!it->second.marker->IsDeleted()) {
+            auto* actor  = RE::TESForm::LookupByID<RE::Actor>(it->first);
+            auto& marker = it->second.marker;
+            // Already released by Drop when it got here through "lost the trail"
+            if (marker && !marker->IsDeleted()) {
+                if (actor) {
                     Drop(actor, it->second, "left the area");
+                } else {
+                    // The actor is gone (deleted): the marker must not stay in the world and the save
+                    Release(nullptr, marker.get(), 0);
                 }
             }
             it = g_trackers.erase(it);
         }
     }
 
+    void NoteKill(RE::FormID a_corpse, RE::FormID a_killer) {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        auto* corpse = RE::TESForm::LookupByID<RE::Actor>(a_corpse);
+        auto* killer = RE::TESForm::LookupByID<RE::Actor>(a_killer);
+        auto* calendar = RE::Calendar::GetSingleton();
+        if (!corpse || !calendar || !IsPlayerSide(killer, player) ||
+            std::ranges::contains(g_bodies, a_corpse, &KnownBody::corpse)) {
+            return;
+        }
+        g_bodies.push_back({ a_corpse, calendar->GetHoursPassed() });
+        Note(std::format("{} killed by {}, body remembered", Describe(corpse), Describe(killer)));
+    }
+
+    std::vector<KnownBody> Bodies() {
+        return g_bodies;
+    }
+
+    std::vector<BodySeen> BodiesSeen() {
+        return { g_bodiesSeen.begin(), g_bodiesSeen.end() };
+    }
+
+    void RestoreBodies(std::vector<KnownBody> a_bodies, std::vector<BodySeen> a_seen) {
+        g_bodies = std::move(a_bodies);
+        g_bodiesSeen.clear();
+        g_bodiesSeen.insert(a_seen.begin(), a_seen.end());
+        SKSE::log::info("Trackers: restored {} bodies, {} reactions to them", g_bodies.size(), g_bodiesSeen.size());
+    }
+
     void Clear() {
         g_trackers.clear();
         g_memory.clear();
         g_recentCombat.clear();
+        g_foundBody.clear();
+        g_bodiesSeen.clear();
+        g_bodies.clear();
         g_sightTested = false;
     }
 

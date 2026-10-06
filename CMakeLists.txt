@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(StealthSenses VERSION 0.7.2 LANGUAGES CXX)
+project(StealthSenses VERSION 0.8.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -84,6 +84,7 @@ add_commonlibsse_plugin(StealthSenses
         main.cpp
         Config.cpp
         Trail.cpp
+        TrailLogic.cpp
         Trackers.cpp
         Serialization.cpp
         Telemetry.cpp
@@ -135,6 +136,39 @@ add_custom_command(TARGET StealthSenses POST_BUILD
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/_package"
     COMMENT "Packaging ${_pkg_zip}"
 )
+
+# Unit tests (tests/): the parts that need no running game — trail rules, co-save layouts,
+# config parsing. Run with ctest in the build directory. On in the dev preset.
+option(STEALTHSENSES_TESTS "Build the unit tests" OFF)
+if(STEALTHSENSES_TESTS)
+    FetchContent_Declare(
+        doctest
+        GIT_REPOSITORY https://github.com/doctest/doctest.git
+        GIT_TAG v2.4.12
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(doctest)
+
+    add_executable(StealthSensesTests
+        tests/main.cpp
+        tests/TrailTests.cpp
+        tests/CoSaveTests.cpp
+        tests/ConfigTests.cpp
+        TrailLogic.cpp
+        Config.cpp
+    )
+    target_include_directories(StealthSensesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_definitions(StealthSensesTests PRIVATE
+        NOMINMAX
+        STEALTHSENSES_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_precompile_headers(StealthSensesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
+    # Only plain helpers of CommonLib are called (NiPoint3 math); nothing that needs the game
+    target_link_libraries(StealthSensesTests PRIVATE
+        CommonLibSSE::CommonLibSSE nlohmann_json::nlohmann_json doctest::doctest)
+
+    enable_testing()
+    add_test(NAME StealthSensesTests COMMAND StealthSensesTests)
+endif()
 
 # Dev deploy: copy the DLL into a mod manager folder after each build,
 # e.g. -DSTEALTHSENSES_DEPLOY_DIR=C:/MO2/mods/StealthSenses/SKSE/Plugins.

@@ -16,7 +16,8 @@
       "inherits": "base",
       "binaryDir": "${sourceDir}/cmake-build-dev",
       "cacheVariables": {
-        "STEALTHSENSES_DEV": "ON"
+        "STEALTHSENSES_DEV": "ON",
+        "STEALTHSENSES_TESTS": "ON"
       }
     },
     {

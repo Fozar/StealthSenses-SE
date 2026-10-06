@@ -35,9 +35,17 @@ An NPC becomes a tracker only when **all** of these hold:
 - it is **hostile** to you and a **humanoid** (no rabbits on your trail);
 - it is **suspicious**: it lost you in a fight within the last minute, *or* it almost spotted you (its detection of you is high), *or* it is in the vanilla alert state;
 - it is standing or walking — not sitting, sleeping or getting into furniture;
-- one of your footprints lies **right in front of it**: within ~5 m and inside a 120° view cone.
+- one of your footprints lies **right in front of it**: within ~5 m, inside a 120° view cone and not behind a wall or a rock.
 
 An NPC that sees you outright, or enters combat, is handed back to the vanilla AI immediately.
+
+### Bodies
+
+Kill someone and leave the body where its friends will find it, and they come looking for you:
+
+- An NPC **finds the body** of one of its own (it shares a faction with the dead — bandit and bandit, a guard and a citizen of the same hold) that you, your follower or your summon killed: it saw the body (within ~14 m, in its view cone, not behind a wall), or the game already let it know of the death — say, it heard the kill and its vanilla search is over.
+- It **walks to the body**, looks around and searches the area from there; if your trail is anywhere near, it takes it up.
+- A dead mudcrab, a comrade killed by wolves, a body older than a day (game time) or one across the dungeon — none of these send anyone after you. Each NPC reacts to each body once, also after loading a save.
 
 ### What a tracker does
 
@@ -47,6 +55,7 @@ An NPC that sees you outright, or enters combat, is handed back to the vanilla A
 - **Loses the trail** where it runs out or crosses bare rock: it stops, looks around, then walks to search points around the last print — first in the direction the trail was heading, then wider — looking around at each.
 - **Picks the trail up again** if it finds a continuation (also across short gaps of rock).
 - **Gives up** after ~45 seconds without a new footprint and goes back to what it was doing. It will not take up the same old trail again.
+- **Gets tired** of a long chase: after ~4 minutes on your trail, or ~85 m from where it started, it gives up however fresh your prints are, and leaves trails alone for a few minutes. Bandits do not follow you to the next hold.
 
 Trackers walk with vanilla AI packages and pathfinding; the plugin only decides *where* they go next.
 
@@ -104,6 +113,13 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 | `notice_line_of_sight` | `true` | …and not hidden behind a wall or a rock |
 | `caution_level` | `70` | Detection of you (0–100) at which a hostile counts as suspicious |
 | `after_combat_seconds` | `60` | A hostile that fought you stays suspicious this long after the fight |
+| `body_found_seconds` | `120` | A hostile that found the body of one of its own you killed stays suspicious this long (0 = off) |
+| `body_notice_radius` | `1000` | …if it saw the body this close (in its view cone, not behind a wall) |
+| `body_know_radius` | `3000` | A hostile that only heard of the body (vanilla noticed the death) goes to it from this close |
+| `body_max_age_hours` | `24` | Bodies older than this (game hours) are no longer news |
+| `give_up_seconds` | `240` | A tracker gives up after this long on the trail, however fresh it is |
+| `leash_distance` | `6000` | …or once this far from where it started |
+| `tired_cooldown` | `180` | After giving up like that it takes up no trail for this long |
 | `require_hostile` | `true` | Only NPCs hostile to you track |
 | `humanoids_only` | `true` | Only humanoids track (no animals) |
 | `include_combat` | `false` | Keep tracking NPCs that are in combat (they ignore packages; leave off) |
@@ -173,7 +189,7 @@ CMake 3.28+, MSVC (Visual Studio 2022 Build Tools), C++23, Ninja. Dependencies (
 Configure presets (`CMakePresets.json`, selectable as profiles in CLion):
 
 - **`release`** → `cmake-build-release/StealthSenses.zip`
-- **`dev`** → `cmake-build-dev/`, with test switches compiled in (console echo of tracker decisions, `debug_all_npcs` to turn every NPC into a tracker, footstep tag logging)
+- **`dev`** → `cmake-build-dev/`, with test switches compiled in (console echo of tracker decisions, `debug_all_npcs` to turn every NPC into a tracker, footstep tag logging), and the unit tests: `cmake-build-dev/StealthSensesTests.exe` (trail rules, co-save layout, config parsing; no game needed)
 
 To copy the DLL into a mod manager folder after every build, set `STEALTHSENSES_DEPLOY_DIR`, e.g. in a local `CMakeUserPresets.json`:
 

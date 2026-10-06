@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0 — 2026-10-07
+
+- **Bodies** — an enemy that finds the body of one of its own you killed (or your follower or summon did) walks over to it, looks around, searches the area and takes up your trail if it is there. "Finds" means it saw the body — close, in front of it, not behind a wall — or the game already let it know of the death (it heard the kill) and its vanilla search is over. "One of its own" means a shared faction: bandit and bandit, a guard and a citizen of the same hold. A dead mudcrab, a comrade killed by wolves, a body older than a day or one far across the dungeon are ignored, and every NPC reacts to every body only once — also after loading a save. New options: `body_found_seconds`, `body_notice_radius`, `body_know_radius`, `body_max_age_hours`.
+- **Trackers get tired** — after 4 minutes on your trail, or 6000 units (~85 m) from where they started, trackers give up however fresh your prints are, and take up no trail for 3 minutes. Before, a tracker kept following as long as new prints kept appearing. New options: `give_up_seconds`, `leash_distance`, `tired_cooldown`.
+- **Fixes** — a runtime marker could stay in the world (and the save) if a tracking NPC was deleted mid-chase; the plugin's per-NPC memory no longer grows for the whole session.
+- **Save data** — a new co-save record keeps the bodies of your victims and who already reacted to them. Saves from 0.7.x load fine.
+
 ## 0.7.2 — 2026-10-06
 
 - **Walls hide footprints** — an enemy notices a footprint only if it can actually see it: not behind a wall, a rock or a closed door. New option `tracker.notice_line_of_sight` (on by default).

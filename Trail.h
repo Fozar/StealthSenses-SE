@@ -50,6 +50,9 @@ namespace StealthSenses::Trail {
     // read again. Leaves gaps in seq.
     void Prune(float a_nowHours, float a_minVisibility);
 
+    // The live trail's footprint with this seq, if it is still there.
+    const Footprint* FindBySeq(std::uint32_t a_seq);
+
     const std::deque<Footprint>& Footprints();
     void Clear();
 

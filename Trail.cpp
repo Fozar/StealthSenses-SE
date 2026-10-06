@@ -18,6 +18,7 @@
 
 #include "Config.h"
 #include "Telemetry.h"
+#include "TrailLogic.h"
 
 namespace StealthSenses::Trail {
     namespace {
@@ -27,27 +28,6 @@ namespace StealthSenses::Trail {
 
         using Clock = std::chrono::steady_clock;
         Clock::time_point g_lastFootstepEvent{};
-
-        float BaseVisibility(RE::MATERIAL_ID a_material) {
-            using M = RE::MATERIAL_ID;
-            const auto& t = Config::Get().trail;
-            switch (a_material) {
-            case M::kSnow:
-            case M::kSnowStairs:
-            case M::kMud:
-            case M::kDirt:
-            case M::kSand:
-            case M::kAsh:
-            case M::kGrass:
-                return t.soft_visibility;
-            case M::kGravel:
-                return t.gravel_visibility;
-            case M::kNone:
-                return t.unknown_visibility;
-            default:
-                return t.hard_visibility;
-            }
-        }
 
         RE::MATERIAL_ID SurfaceUnder(RE::PlayerCharacter* a_player) {
             // [engine_api §6] bhkCharacterController::surfaceMaterial, works indoors too
@@ -66,35 +46,6 @@ namespace StealthSenses::Trail {
                 }
             }
             return material;
-        }
-
-        // Over max_footprints: the older half keeps one footprint per thin_spacing instead of
-        // the oldest footprints going first — at 64 units apart 2048 footprints were ~10-20 min
-        // of walking, and the old trail was gone before it faded. Trackers read up to
-        // lead_distance (900) ahead and across gaps of gap_distance (1200), so a sparser old
-        // trail still leads them. Only what is left over the limit after that goes oldest first.
-        void Thin() {
-            const auto& cfg   = Config::Get().trail;
-            const auto  limit = static_cast<std::size_t>(cfg.max_footprints);
-            const auto  half  = g_trail.size() / 2;
-
-            std::deque<Footprint> thinned;
-            const Footprint*      kept = nullptr;  // deque::push_back keeps references valid
-            for (std::size_t i = 0; i < g_trail.size(); ++i) {
-                const auto& fp   = g_trail[i];
-                const bool  keep = i + 1 >= half || !kept || kept->space != fp.space ||
-                                  kept->pos.GetDistance(fp.pos) >= cfg.thin_spacing;
-                if (keep) {
-                    thinned.push_back(fp);
-                    kept = &thinned.back();
-                }
-            }
-            const auto before = g_trail.size();
-            g_trail           = std::move(thinned);
-            while (g_trail.size() > limit) {
-                g_trail.pop_front();
-            }
-            SKSE::log::debug("Trail: thinned {} -> {} footprints", before, g_trail.size());
         }
     }
 
@@ -164,7 +115,9 @@ namespace StealthSenses::Trail {
 
         g_trail.push_back(fp);
         if (g_trail.size() > static_cast<std::size_t>(cfg.max_footprints)) {
-            Thin();
+            const auto before = g_trail.size();
+            Thin(g_trail, cfg);
+            SKSE::log::debug("Trail: thinned {} -> {} footprints", before, g_trail.size());
         }
 
         Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(pos) },
@@ -182,27 +135,15 @@ namespace StealthSenses::Trail {
     }
 
     float Visibility(const Footprint& a_fp, float a_nowHours, bool a_badWeather) {
-        const auto& cfg = Config::Get().trail;
-        float base = BaseVisibility(a_fp.material);
-        if (a_fp.flags & kBlood) {
-            base += cfg.blood_visibility_bonus;
-        }
-        float halflife = cfg.halflife_hours;
-        if (a_badWeather) {
-            halflife *= cfg.weather_halflife_mult;
-        }
-        const float age = std::max(a_nowHours - a_fp.gameHours, 0.0f);
-        return base * std::exp2(-age / halflife);
+        return Visibility(a_fp, a_nowHours, a_badWeather, Config::Get().trail);
     }
 
     void Prune(float a_nowHours, float a_minVisibility) {
-        // Visibility only drops with age; bad weather lowers it for now, but it comes back when
-        // the rain stops, so the clear-weather value is the most a footprint will ever show.
-        // Below the reading threshold even then it is dead weight: before 0.7.2 footprints stayed
-        // for ten halflives (~1 h of real time) and filled max_footprints long after they faded.
-        std::erase_if(g_trail, [&](const Footprint& a_fp) {
-            return Visibility(a_fp, a_nowHours, false) < a_minVisibility;
-        });
+        Prune(g_trail, a_nowHours, a_minVisibility, Config::Get().trail);
+    }
+
+    const Footprint* FindBySeq(std::uint32_t a_seq) {
+        return FindBySeq(g_trail, a_seq);
     }
 
     const std::deque<Footprint>& Footprints() {

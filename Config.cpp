@@ -54,16 +54,22 @@ namespace StealthSenses::Config {
             SKSE::log::info("Config: {} not found, using defaults", path.string());
             return;
         }
-
-        nlohmann::json root;
+        const std::string text{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
         try {
-            root = nlohmann::json::parse(file, nullptr, true, true);
+            g_settings = Parse(text);
         } catch (const nlohmann::json::exception& e) {
             SKSE::log::error("Config: parse error, using defaults: {}", e.what());
             return;
         }
+        SKSE::log::info("Config: loaded {}", path.string());
+    }
 
-        auto& t = g_settings.trail;
+    Settings Parse(std::string_view a_text) {
+        // Comments allowed (the last true): users annotate their config
+        const auto root = nlohmann::json::parse(a_text, nullptr, true, true);
+        Settings   settings;
+
+        auto& t = settings.trail;
         const auto& jt = Section(root, "trail");
         Read(jt, "enabled", t.enabled);
         Read(jt, "min_spacing", t.min_spacing);
@@ -79,7 +85,7 @@ namespace StealthSenses::Config {
         Read(jt, "blood_steps", t.blood_steps);
         Read(jt, "blood_visibility_bonus", t.blood_visibility_bonus);
 
-        auto& k = g_settings.tracker;
+        auto& k = settings.tracker;
         const auto& jk = Section(root, "tracker");
         Read(jk, "enabled", k.enabled);
         Read(jk, "interval_ms", k.interval_ms);
@@ -106,6 +112,13 @@ namespace StealthSenses::Config {
         Read(jk, "close_read_radius", k.close_read_radius);
         Read(jk, "caution_level", k.caution_level);
         Read(jk, "after_combat_seconds", k.after_combat_seconds);
+        Read(jk, "body_found_seconds", k.body_found_seconds);
+        Read(jk, "body_notice_radius", k.body_notice_radius);
+        Read(jk, "body_know_radius", k.body_know_radius);
+        Read(jk, "body_max_age_hours", k.body_max_age_hours);
+        Read(jk, "give_up_seconds", k.give_up_seconds);
+        Read(jk, "leash_distance", k.leash_distance);
+        Read(jk, "tired_cooldown", k.tired_cooldown);
         Read(jk, "require_hostile", k.require_hostile);
         Read(jk, "humanoids_only", k.humanoids_only);
         Read(jk, "include_combat", k.include_combat);
@@ -114,7 +127,7 @@ namespace StealthSenses::Config {
         Read(jk, "debug_all_npcs", k.debug_all_npcs);
 #endif
 
-        auto& d = g_settings.debug;
+        auto& d = settings.debug;
         const auto& jd = Section(root, "debug");
         Read(jd, "log_level", d.log_level);
         Read(jd, "telemetry", d.telemetry);
@@ -134,6 +147,6 @@ namespace StealthSenses::Config {
         k.interval_ms      = std::clamp(k.interval_ms, t.poll_interval_ms, 10000);
         k.max_trackers     = std::max(k.max_trackers, 1);
 
-        SKSE::log::info("Config: loaded {}", path.string());
+        return settings;
     }
 }

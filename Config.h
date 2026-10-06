@@ -42,6 +42,8 @@ namespace StealthSenses::Config {
         float unknown_visibility     = 0.5f;    // MATERIAL_ID::kNone
         int   blood_steps            = 20;      // footprints flagged as bloody after the player is hit
         float blood_visibility_bonus = 1.0f;
+
+        bool operator==(const TrailSettings&) const = default;
     };
 
     struct TrackerSettings {
@@ -70,11 +72,20 @@ namespace StealthSenses::Config {
         float       close_read_radius = 300.0f; // "up close" for faint footprints
         int         caution_level    = 70;      // stealth meter 0..100 that counts as "suspicious" (baseline near the player is 41-67)
         float       after_combat_seconds = 60.0f; // a hostile that fought the player stays suspicious this long after
+        float       body_found_seconds = 120.0f;  // ...and one that found the body of its own the player killed (0 = off)
+        float       body_notice_radius = 1000.0f; // a body is seen this far (in the view cone, line of sight)
+        float       body_know_radius   = 3000.0f; // a body it only heard of (vanilla dead list): goes to it from this close
+        float       body_max_age_hours = 24.0f;   // older bodies are no news
+        float       give_up_seconds    = 240.0f;  // a tracker gives up after this long on the trail, however fresh
+        float       leash_distance     = 6000.0f; // ...or this far from where it started
+        float       tired_cooldown     = 180.0f;  // no new trail for this long after giving up like that
         bool        require_hostile  = true;
         bool        humanoids_only   = true;    // only ActorTypeNPC track (no rabbits on the trail)
         bool        include_combat   = false;
         int         max_trackers     = 4;
         STEALTHSENSES_DEV_SETTING(bool, debug_all_npcs, false, "every High-process NPC tracks (AI obedience test)")
+
+        bool operator==(const TrackerSettings&) const = default;
     };
 
     // Bug-report tools (log level, telemetry, mark key) ship in release too; telemetry is off by
@@ -86,14 +97,23 @@ namespace StealthSenses::Config {
         int         mark_key          = 0x41;       // DirectInput scan code; 0x41 = F7, 0 = off
         STEALTHSENSES_DEV_SETTING(bool, console, true, "echo tracker decisions to the in-game console")
         STEALTHSENSES_DEV_SETTING(bool, log_footstep_tags, true, "log each new footstep tag with its thread")
+
+        bool operator==(const DebugSettings&) const = default;
     };
 
     struct Settings {
         TrailSettings   trail;
         TrackerSettings tracker;
         DebugSettings   debug;
+
+        bool operator==(const Settings&) const = default;
     };
 
     const Settings& Get();
     void Load();
+
+    // Config JSON text to settings: missing keys and wrong types keep their defaults, values
+    // are clamped to what the loops can take. Throws nlohmann::json::exception on malformed
+    // JSON. Load() applies it to the config file; the unit tests call it directly.
+    Settings Parse(std::string_view a_text);
 }

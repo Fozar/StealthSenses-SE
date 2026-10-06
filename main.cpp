@@ -106,6 +106,21 @@ namespace {
         }
     };
 
+    // Deaths: the trackers remember bodies of the player's victims (see Trackers::NoteKill).
+    // The event comes twice, dying and dead; only the second one counts.
+    class DeathSink final : public RE::BSTEventSink<RE::TESDeathEvent> {
+    public:
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event,
+            RE::BSTEventSource<RE::TESDeathEvent>*) override {
+            if (a_event && a_event->dead && a_event->actorDying && a_event->actorKiller) {
+                const auto corpse = a_event->actorDying->GetFormID();
+                const auto killer = a_event->actorKiller->GetFormID();
+                SKSE::GetTaskInterface()->AddTask([corpse, killer]() { Trackers::NoteKill(corpse, killer); });
+            }
+            return RE::BSEventNotifyControl::kContinue;
+        }
+    };
+
     // Mark key: the tester flags a moment ("at mark 3 he turned back"); see Telemetry::Mark
     class InputSink final : public RE::BSTEventSink<RE::InputEvent*> {
     public:
@@ -187,6 +202,8 @@ namespace {
         if (auto* events = RE::ScriptEventSourceHolder::GetSingleton()) {
             static HitSink sink;
             events->AddEventSink<RE::TESHitEvent>(&sink);
+            static DeathSink deathSink;
+            events->AddEventSink<RE::TESDeathEvent>(&deathSink);
         }
 
         if (auto* input = RE::BSInputDeviceManager::GetSingleton()) {

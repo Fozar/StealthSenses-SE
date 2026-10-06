@@ -4,60 +4,18 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 
 **Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163 · **Source:** https://github.com/Fozar/StealthSenses-SE
 
-> **Status: early access (0.7.x).** The trail mechanic works and is tested in game on AE 1.7.104. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
+> **Status: early access (0.8.x).** The trail mechanic works and is tested in game on AE 1.7.104. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
 
 ---
 
-## How it works
+## What it does
 
-### Your trail
+- **Your trail** — every step you take on foot leaves a footprint. Soft ground holds a clear print, stone barely any; prints fade over game time (faster in rain or snow), water breaks the trail, blood makes it last. The trail is saved with your game.
+- **Trackers** — a hostile humanoid with a reason to be suspicious that sees one of your prints in front of it takes up the trail: draws its weapon, follows print to print, bends down to examine one, searches where the trail runs out, and gives up after a while.
+- **Bodies** — an enemy that finds the body of one of its own you killed goes to it and looks for your trail from there.
+- **Vanilla AI stays in charge** — trackers walk with vanilla packages and pathfinding; one that spots you or starts a fight is handed back to the vanilla AI at once.
 
-- Every step you take on foot is recorded as a footprint (one per ~64 units of movement), using the game's own footstep events.
-- Each footprint remembers **where**, **when** (game time) and **what you stepped on**. Snow, mud, dirt, sand, ash and grass hold a clear print; gravel less so; stone, wood and ice barely at all.
-- Footprints **fade over game time** — visibility halves every 2 game hours, three times faster in rain or snow outdoors.
-- Water breaks the trail (swimming and wading leave nothing). Riding leaves nothing either.
-- When you get hit, the next 20 footprints carry **blood** and stay visible much longer.
-- The trail is saved with your game.
-
-How long a footprint stays useful with default settings (1 game hour ≈ 3 real minutes at the default timescale):
-
-| Surface | Readable from a distance | Readable up close |
-|---|---|---|
-| Snow, mud, dirt, sand, grass | ~4.6 game hours | ~6.6 game hours |
-| Gravel | ~3.2 h | ~5.2 h |
-| Stone, wood, ice | never | ~1.2 h |
-| With blood | about 2 h longer | |
-
-### Who tracks you
-
-An NPC becomes a tracker only when **all** of these hold:
-
-- it is **hostile** to you and a **humanoid** (no rabbits on your trail);
-- it is **suspicious**: it lost you in a fight within the last minute, *or* it almost spotted you (its detection of you is high), *or* it is in the vanilla alert state;
-- it is standing or walking — not sitting, sleeping or getting into furniture;
-- one of your footprints lies **right in front of it**: within ~5 m, inside a 120° view cone and not behind a wall or a rock.
-
-An NPC that sees you outright, or enters combat, is handed back to the vanilla AI immediately.
-
-### Bodies
-
-Kill someone and leave the body where its friends will find it, and they come looking for you:
-
-- An NPC **finds the body** of one of its own (it shares a faction with the dead — bandit and bandit, a guard and a citizen of the same hold) that you, your follower or your summon killed: it saw the body (within ~14 m, in its view cone, not behind a wall), or the game already let it know of the death — say, it heard the kill and its vanilla search is over.
-- It **walks to the body**, looks around and searches the area from there; if your trail is anywhere near, it takes it up.
-- A dead mudcrab, a comrade killed by wolves, a body older than a day (game time) or one across the dungeon — none of these send anyone after you. Each NPC reacts to each body once, also after loading a save.
-
-### What a tracker does
-
-- **Picks up the trail** — draws its weapon and goes on alert.
-- **Follows** the freshest footprint it can read ahead, walking from print to print. Clear prints are read from ~13 m away; faint ones (on stone) only within ~4 m, so on rock it moves slowly and carefully.
-- **Examines** a print now and then — bends down to the ground.
-- **Loses the trail** where it runs out or crosses bare rock: it stops, looks around, then walks to search points around the last print — first in the direction the trail was heading, then wider — looking around at each.
-- **Picks the trail up again** if it finds a continuation (also across short gaps of rock).
-- **Gives up** after ~45 seconds without a new footprint and goes back to what it was doing. It will not take up the same old trail again.
-- **Gets tired** of a long chase: after ~4 minutes on your trail, or ~85 m from where it started, it gives up however fresh your prints are, and leaves trails alone for a few minutes. Bandits do not follow you to the next hold.
-
-Trackers walk with vanilla AI packages and pathfinding; the plugin only decides *where* they go next.
+The full description is on the [Nexus page](https://www.nexusmods.com/skyrimspecialedition/mods/194163).
 
 ---
 
@@ -184,29 +142,14 @@ The trace records your position, every nearby NPC's state and every decision the
 
 ## Building from source
 
-CMake 3.28+, MSVC (Visual Studio 2022 Build Tools), C++23, Ninja. Dependencies (CommonLibSSE-NG v10.1.0, fmt, spdlog, nlohmann_json, DirectXTK headers) are fetched on configure; CommonLibSSE compiles from source on the first build (~15 minutes; limit parallelism to `-j 4` on 16 GB RAM).
-
-Configure presets (`CMakePresets.json`, selectable as profiles in CLion):
-
-- **`release`** → `cmake-build-release/StealthSenses.zip`
-- **`dev`** → `cmake-build-dev/`, with test switches compiled in (console echo of tracker decisions, `debug_all_npcs` to turn every NPC into a tracker, footstep tag logging), and the unit tests: `cmake-build-dev/StealthSensesTests.exe` (trail rules, co-save layout, config parsing; no game needed)
-
-To copy the DLL into a mod manager folder after every build, set `STEALTHSENSES_DEPLOY_DIR`, e.g. in a local `CMakeUserPresets.json`:
-
-```json
-{
-  "version": 6,
-  "configurePresets": [
-    { "name": "dev-mo2", "inherits": "dev",
-      "cacheVariables": { "STEALTHSENSES_DEPLOY_DIR": "C:/MO2/mods/StealthSenses/SKSE/Plugins" } }
-  ]
-}
-```
+CMake 3.28+, MSVC (Visual Studio 2022 Build Tools), C++23, Ninja. Dependencies are fetched on configure.
 
 ```
 cmake --preset release
 cmake --build cmake-build-release -j 4
 ```
+
+The plugin and `cmake-build-release/StealthSenses.zip` are the result.
 
 ---
 

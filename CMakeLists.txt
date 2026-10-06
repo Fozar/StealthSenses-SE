@@ -123,10 +123,15 @@ add_custom_command(TARGET StealthSenses POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/StealthSensesConfig.json"
         "${_pkg_plugins}/StealthSensesConfig.json"
+    # GPL-3.0 (inherited from CommonLibSSE-NG): the license text ships with the binary
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt"
+        "${CMAKE_CURRENT_BINARY_DIR}/_package/LICENSE.txt"
     COMMAND ${CMAKE_COMMAND} -E tar cf
         "${CMAKE_CURRENT_BINARY_DIR}/${_pkg_zip}" --format=zip
         -- "SKSE/Plugins/StealthSenses.dll"
            "SKSE/Plugins/StealthSensesConfig.json"
+           "LICENSE.txt"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/_package"
     COMMENT "Packaging ${_pkg_zip}"
 )

@@ -190,3 +190,13 @@ To copy the DLL into a mod manager folder after every build, set `STEALTHSENSES_
 cmake --preset release
 cmake --build cmake-build-release -j 4
 ```
+
+---
+
+## License
+
+Copyright (C) 2026 fozar.
+
+Stealth Senses is free software, licensed under the **GNU General Public License v3.0 or later** — see [`LICENSE.txt`](LICENSE.txt). It links against [CommonLibSSE-NG](https://github.com/alandtse/CommonLibVR) (GPL-3.0), so the whole plugin is distributed under the same terms: you may use, modify and redistribute it, provided that derived works are also released under GPL-3.0 with their source code.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.

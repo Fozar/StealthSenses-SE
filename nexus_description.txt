@@ -83,3 +83,13 @@ Skyrim VR is not supported.[/font]
 [*]Send [font=Courier New]StealthSenses.log[/font] and [font=Courier New]StealthSenses.trace.jsonl[/font] from [font=Courier New]Documents\My Games\Skyrim Special Edition\SKSE\[/font], and say what you saw at which mark.
 [/list]
 The trace records your character's position, nearby NPCs and every decision the mod makes — nothing else.[/font]
+
+[font=Tahoma][size=4][b]— License and source code —[/b][/size][/font]
+
+[font=Tahoma]Stealth Senses is free software under the [url=https://www.gnu.org/licenses/gpl-3.0.html]GNU General Public License v3.0[/url] (or later), because it is built on [url=https://github.com/alandtse/CommonLibVR]CommonLibSSE-NG[/url], which is GPL-3.0. The full license text is included in the download as [font=Courier New]LICENSE.txt[/font].
+
+[b]Source code:[/b] [url=TODO_GITHUB_URL]TODO_GITHUB_URL[/url]
+
+You are free to use, modify and redistribute this mod, including in modlists and translations, as long as derived works are released under GPL-3.0 together with their source code.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.[/font]

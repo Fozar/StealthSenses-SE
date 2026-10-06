@@ -105,6 +105,7 @@ namespace StealthSenses::Trackers {
         // the player found, the NPC stays suspicious and takes up a trail it comes across
         std::unordered_map<RE::FormID, float>  g_recentCombat;
         std::vector<Binding>                   g_stale;
+        bool                                   g_sightTested = false;
 
         // RequestDetectionLevel returns < 0 while the target is undetected; MaxsuDetectionMeter
         // maps it to a 0..100 meter as level + 100, and any value >= 0 to 100 (detected).
@@ -154,13 +155,10 @@ namespace StealthSenses::Trackers {
         }
 
         const Trail::Footprint* FindBySeq(std::uint32_t a_seq) {
-            // seq values are consecutive in the deque (Restore renumbers on load)
+            // seq grows along the deque, with gaps where Prune and thinning removed footprints
             const auto& trail = Trail::Footprints();
-            if (trail.empty() || a_seq < trail.front().seq) {
-                return nullptr;
-            }
-            const auto index = static_cast<std::size_t>(a_seq - trail.front().seq);
-            return index < trail.size() && trail[index].seq == a_seq ? &trail[index] : nullptr;
+            const auto  it    = std::ranges::lower_bound(trail, a_seq, {}, &Trail::Footprint::seq);
+            return it != trail.end() && it->seq == a_seq ? &*it : nullptr;
         }
 
         // Undoes what Steer did: linked ref back, marker gone, normal AI re-evaluated.
@@ -218,18 +216,20 @@ namespace StealthSenses::Trackers {
                 { "event", a_event }, { "played", accepted } });
         }
 
-        // Vanilla alert state (the lowProcessFlags kAlert bit, what Papyrus Actor.SetAlert sets).
-        // Actor::SetIsAlerted — SE 36281 (0x1405D23C0, 1.5.97_comments.csv + offsets-1-5-97-0.csv),
-        // AE 37270 (skyrimae.rename) [matched by name; not in se_ae.csv]. A 0x20-byte function
-        // (IsAlerted follows right after), so a flag setter: void(Actor*, bool) [assumption].
-        // Test 0.5.0: Papyrus SetAlert via VirtualMachine::DispatchMethodCall returned false — a
-        // bandit has no bound script object to dispatch on. Returns whether the flag now matches.
+        // Vanilla alert state: the kAlert bit of AIProcess::lowProcessFlags [CL], written directly.
+        // That is all the engine setter does — disassembly of runtime 1.7.104: Actor::SetIsAlerted
+        // (AE 37270) is "currentProcess ? ActorProcess::SetIsAlerted : return", and
+        // ActorProcess::SetIsAlerted (AE 39165) sets or clears bit 3 of the byte at +0x136 and
+        // returns. Up to 0.7.1 the plugin called 37270 by ID, whose SE pair (36281) was only matched
+        // by name; the field needs no ID on any runtime. Test 0.5.0: Papyrus SetAlert via
+        // DispatchMethodCall returned false — a bandit has no bound script object to dispatch on.
         bool SetAlert(RE::Actor* a_actor, bool a_alert) {
-            using func_t = void(RE::Actor*, bool);
-            static REL::Relocation<func_t> setIsAlerted{ RELOCATION_ID(36281, 37270) };
-            setIsAlerted(a_actor, a_alert);
-            const auto* process = a_actor->GetActorRuntimeData().currentProcess;
-            return process && process->lowProcessFlags.all(RE::AIProcess::LowProcessFlags::kAlert) == a_alert;
+            auto* process = a_actor->GetActorRuntimeData().currentProcess;
+            if (!process) {
+                return false;
+            }
+            process->lowProcessFlags.set(a_alert, RE::AIProcess::LowProcessFlags::kAlert);
+            return true;
         }
 
         // Closest navmesh point, so search points do not land inside rocks and walls.
@@ -250,6 +250,66 @@ namespace StealthSenses::Trackers {
                 return std::nullopt;
             }
             return out;
+        }
+
+        // Line of sight from the NPC's eyes to a footprint: without it a footprint behind a wall
+        // or a rock was noticed if it was close and in front (known limitation of 0.7.0).
+        // bhkWorld::PickObject (virtual 33) + bhkPickData [CL]; the ray setup — the actor's own
+        // filter so its body is skipped, layer kLOS, BS_TO_HK scale — is the one GrabAndThrow
+        // uses (repos/powerof3_GrabAndThrow/src/TrajectoryOverlay.cpp:49-64) [prior art].
+        // Actors in the way do not hide a footprint. The ray ends a little above the ground, and
+        // a hit within kLosSlack of that end counts as seen: at a shallow angle the ground right
+        // around the footprint gets in the way first [assumption].
+        constexpr float kEyeFactor      = 0.9f;  // eyes at 90% of the actor's height
+        constexpr float kLosAboveGround = 16.0f;
+        constexpr float kLosSlack       = 48.0f;
+        constexpr int   kMaxSightRays   = 6;  // per NPC and tick, when it notices footprints
+
+        enum class Sight { Seen, Blocked, Unknown };
+
+        Sight CanSee(RE::Actor* a_actor, const RE::NiPoint3& a_point) {
+            auto* cell  = a_actor->GetParentCell();
+            auto* world = cell ? cell->GetbhkWorld() : nullptr;
+            if (!world) {
+                return Sight::Unknown;
+            }
+            auto eye = a_actor->GetPosition();
+            eye.z += a_actor->GetHeight() * kEyeFactor;
+            auto to = a_point;
+            to.z += kLosAboveGround;
+
+            RE::CFilter filter;
+            a_actor->GetCollisionFilterInfo(filter);
+            filter.SetCollisionLayer(RE::COL_LAYER::kLOS);
+
+            RE::bhkPickData pick;
+            pick.rayInput.from                        = eye * RE::bhkWorld::GetWorldScale();
+            pick.rayInput.to                          = to * RE::bhkWorld::GetWorldScale();
+            pick.rayInput.filterInfo                  = filter;
+            pick.rayInput.enableShapeCollectionFilter = true;
+            world->PickObject(pick);
+
+            const auto* collidable = pick.rayOutput.rootCollidable;
+            const auto  layer      = collidable ? collidable->GetCollisionLayer() : RE::COL_LAYER::kUnidentified;
+            const float length     = eye.GetDistance(to);
+            const float shortBy    = collidable ? length * (1.0f - pick.rayOutput.hitFraction) : 0.0f;
+            auto        result     = Sight::Seen;
+            switch (layer) {
+            case RE::COL_LAYER::kUnidentified:  // no hit
+            case RE::COL_LAYER::kCharController:
+            case RE::COL_LAYER::kBiped:
+            case RE::COL_LAYER::kBipedNoCC:
+            case RE::COL_LAYER::kDeadBip:
+                break;
+            default:
+                result = shortBy <= kLosSlack ? Sight::Seen : Sight::Blocked;
+                break;
+            }
+            // Every ray: what it hit and how far short of the footprint (whether walls block at all)
+            Telemetry::Write({ { "type", "sight" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
+                { "eye", Telemetry::Vec(eye) }, { "to", Telemetry::Vec(to) }, { "hit", collidable != nullptr },
+                { "layer", static_cast<int>(layer) }, { "short", shortBy }, { "blocked", result == Sight::Blocked } });
+            return result;
         }
 
         void MoveMarker(State& a_state, const RE::NiPoint3& a_pos) {
@@ -403,7 +463,19 @@ namespace StealthSenses::Trackers {
         const bool  exterior   = cell && !cell->IsInteriorCell();
         const bool  badWeather = exterior && sky && (sky->IsRaining() || sky->IsSnowing());
 
-        Trail::Prune(now);
+        // Once per loaded game: a ray from the player's eyes into the ground under its feet must be
+        // blocked. If it is not, the ray setup sees no world geometry and the line-of-sight check
+        // passes everything (test 0.7.2: only unobstructed rays, nothing to tell the two apart).
+        if (!g_sightTested && cfg.notice_line_of_sight) {
+            g_sightTested = true;
+            auto below    = player->GetPosition();
+            below.z -= 200.0f;
+            const auto sight = CanSee(player, below);
+            SKSE::log::info("Sight self-test: ray into the ground under the player is {} (expected blocked)",
+                sight == Sight::Blocked ? "blocked" : sight == Sight::Seen ? "NOT blocked" : "unknown, no havok world");
+        }
+
+        Trail::Prune(now, cfg.faint_visibility);
 
         // Footprints worth a look at all: clear ones (>= min_visibility) are read from afar, faint
         // ones (>= faint_visibility, e.g. stone at 0.15) only within close_read_radius of the NPC —
@@ -528,28 +600,36 @@ namespace StealthSenses::Trackers {
                 const bool  idleBody   = sitSleep != RE::SIT_SLEEP_STATE::kNormal;
 
                 // Notices only a footprint right next to it and in front of it (GetHeadingAngle:
-                // degrees between where the NPC faces and the point [CL]); takes the freshest one
-                const Trail::Footprint* best   = nullptr;
-                int                     nearCount = 0;
-                int                     viewCount = 0;
+                // degrees between where the NPC faces and the point [CL]) and not hidden from its
+                // eyes; takes the freshest such one
+                std::vector<const Trail::Footprint*> inView;
+                int                                  nearCount = 0;
                 for (const auto& c : candidates) {
                     const auto* fp = c.fp;
                     if (fp->seq <= skipSeq || pos.GetDistance(fp->pos) > cfg.notice_radius || !readableFrom(c, pos)) {
                         continue;
                     }
                     ++nearCount;
-                    if (a_actor->GetHeadingAngle(fp->pos, true) > cfg.notice_fov * 0.5f) {
-                        continue;
+                    if (a_actor->GetHeadingAngle(fp->pos, true) <= cfg.notice_fov * 0.5f) {
+                        inView.push_back(fp);
                     }
-                    ++viewCount;
-                    if (!idleBody && (!best || fp->seq > best->seq)) {
-                        best = fp;
+                }
+                // Freshest first; a few rays at most per NPC and tick (candidates are in seq order)
+                const Trail::Footprint* best    = nullptr;
+                int                     blocked = 0;
+                // Out of rays with every one blocked: the rest is behind the same wall
+                for (auto it = inView.rbegin(); !idleBody && it != inView.rend() && blocked < kMaxSightRays; ++it) {
+                    if (!cfg.notice_line_of_sight || CanSee(a_actor, (*it)->pos) != Sight::Blocked) {
+                        best = *it;
+                        break;
                     }
+                    ++blocked;
                 }
                 if (nearCount > 0) {
                     // Why a footprint next to an NPC was or was not noticed
                     Telemetry::Write({ { "type", "notice" }, { "id", Telemetry::Hex(id) }, { "near", nearCount },
-                        { "inView", viewCount }, { "sitsleep", static_cast<int>(sitSleep) }, { "picked", best != nullptr } });
+                        { "inView", inView.size() }, { "blocked", blocked }, { "sitsleep", static_cast<int>(sitSleep) },
+                        { "picked", best != nullptr } });
                 }
                 if (best) {
                     Note(std::format("{} noticed footprint #{} (meter {}, alert {}, after fight {})", Describe(a_actor), best->seq, meter, alerted, afterFight));
@@ -736,6 +816,7 @@ namespace StealthSenses::Trackers {
         g_trackers.clear();
         g_memory.clear();
         g_recentCombat.clear();
+        g_sightTested = false;
     }
 
     std::vector<Binding> Bindings() {

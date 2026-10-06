@@ -32,6 +32,7 @@ namespace StealthSenses::Config {
         bool  enabled                = true;
         float min_spacing            = 64.0f;   // units between two recorded footprints
         int   max_footprints         = 2048;
+        float thin_spacing           = 256.0f;  // over max_footprints the older half keeps one per this many units
         int   poll_interval_ms       = 250;     // fallback sampler when no footstep events arrive
         float halflife_hours         = 2.0f;    // game hours until visibility halves
         float weather_halflife_mult  = 0.35f;   // halflife multiplier in rain/snow (exterior only)
@@ -48,6 +49,7 @@ namespace StealthSenses::Config {
         int         interval_ms      = 1000;
         float       notice_radius    = 350.0f;  // an NPC notices a footprint only this close
         float       notice_fov       = 120.0f;  // ...and within this view cone (degrees, full width)
+        bool        notice_line_of_sight = true; // ...and not behind a wall or a rock (raycast)
         float       lead_distance    = 900.0f;  // next footprint must be this close to the NPC
         float       gap_distance     = 1200.0f; // look this far past the last point when the trail breaks
         float       arrive_radius    = 300.0f;  // travel packages stop ~260-280 short of the marker

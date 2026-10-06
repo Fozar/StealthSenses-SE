@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.2 — 2026-10-06
+
+- **Walls hide footprints** — an enemy notices a footprint only if it can actually see it: not behind a wall, a rock or a closed door. New option `tracker.notice_line_of_sight` (on by default).
+- **Longer memory for your trail** — footprints that have faded beyond reading are forgotten right away instead of an hour later, and when the trail reaches `max_footprints` its older half is thinned out (one footprint per `trail.thin_spacing` units, 256 by default) instead of being cut off. Long trails stay followable for as long as they are visible.
+- **Safer on Special Edition** — the tracker's alert state is now set through a CommonLibSSE field instead of an engine function looked up by address (the function does exactly that, checked in the 1.7.104 executable). Its Special Edition address was only matched by name; every address the plugin uses now comes from CommonLibSSE.
+- **Correction** — 0.7.0 and 0.7.1 were tested on Anniversary Edition **1.7.104**, not 1.6.1170 as stated before.
+
 ## 0.7.1 — 2026-10-06
 
 No gameplay changes.

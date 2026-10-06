@@ -68,6 +68,7 @@ namespace StealthSenses::Config {
         Read(jt, "enabled", t.enabled);
         Read(jt, "min_spacing", t.min_spacing);
         Read(jt, "max_footprints", t.max_footprints);
+        Read(jt, "thin_spacing", t.thin_spacing);
         Read(jt, "poll_interval_ms", t.poll_interval_ms);
         Read(jt, "halflife_hours", t.halflife_hours);
         Read(jt, "weather_halflife_mult", t.weather_halflife_mult);
@@ -84,6 +85,7 @@ namespace StealthSenses::Config {
         Read(jk, "interval_ms", k.interval_ms);
         Read(jk, "notice_radius", k.notice_radius);
         Read(jk, "notice_fov", k.notice_fov);
+        Read(jk, "notice_line_of_sight", k.notice_line_of_sight);
         Read(jk, "lead_distance", k.lead_distance);
         Read(jk, "gap_distance", k.gap_distance);
         Read(jk, "arrive_radius", k.arrive_radius);
@@ -128,6 +130,7 @@ namespace StealthSenses::Config {
         t.max_footprints   = std::clamp(t.max_footprints, 16, 65536);
         t.poll_interval_ms = std::clamp(t.poll_interval_ms, 50, 5000);
         t.halflife_hours   = std::max(t.halflife_hours, 0.01f);
+        t.thin_spacing     = std::max(t.thin_spacing, t.min_spacing);
         k.interval_ms      = std::clamp(k.interval_ms, t.poll_interval_ms, 10000);
         k.max_trackers     = std::max(k.max_trackers, 1);
 

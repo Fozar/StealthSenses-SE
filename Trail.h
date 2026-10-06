@@ -46,8 +46,9 @@ namespace StealthSenses::Trail {
     // Visibility in [0, ~2] at the current game time and weather.
     float Visibility(const Footprint& a_fp, float a_nowHours, bool a_badWeather);
 
-    // Drops footprints that have faded completely.
-    void Prune(float a_nowHours);
+    // Drops footprints that are below a_minVisibility even in clear weather: they can never be
+    // read again. Leaves gaps in seq.
+    void Prune(float a_nowHours, float a_minVisibility);
 
     const std::deque<Footprint>& Footprints();
     void Clear();

@@ -42,7 +42,7 @@ Only hostile humanoids track. Animals never do (yet).[/font]
 [font=Tahoma][size=4][b]— Requirements —[/b][/size][/font]
 
 [font=Tahoma][list]
-[*]Skyrim [b]Anniversary Edition 1.6.x[/b] — tested on 1.6.1170
+[*]Skyrim [b]Anniversary Edition 1.6.x and 1.7.x[/b] — tested on 1.7.104; 1.6.x should work but is untested
 [*]Skyrim Special Edition 1.5.97 — expected to work, [b]not tested[/b]
 [*][url=https://skse.silverlock.org/]SKSE64[/url] matching your game version
 [*][url=https://www.nexusmods.com/skyrimspecialedition/mods/32444]Address Library for SKSE Plugins[/url]
@@ -70,7 +70,6 @@ Skyrim VR is not supported.[/font]
 [font=Tahoma][size=4][b]— Known limitations —[/b][/size][/font]
 
 [font=Tahoma][list]
-[*]An enemy can notice a footprint on the other side of a wall if it is right in front of it.
 [*]Trackers do not voice alert lines of their own.
 [*]Animals do not track — planned together with scent.
 [/list][/font]

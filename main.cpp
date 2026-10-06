@@ -150,8 +150,14 @@ namespace {
 
         backlog += dt;
         if (backlog * 1000.0f >= static_cast<float>(Config::Get().tracker.interval_ms)) {
+            const auto start = std::chrono::steady_clock::now();
             Trackers::Update(backlog);
             backlog = 0.0f;
+            if (Telemetry::Enabled()) {
+                // Main-thread cost of a tracker tick: trail scan, NPCs, sight rays
+                const auto us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+                Telemetry::Write({ { "type", "perf" }, { "us", us.count() }, { "footprints", Trail::Footprints().size() } });
+            }
         }
     }
 

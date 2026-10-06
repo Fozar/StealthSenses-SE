@@ -4,7 +4,7 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 
 **Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163 · **Source:** https://github.com/Fozar/StealthSenses-SE
 
-> **Status: early access (0.7.x).** The trail mechanic works and is tested in game on AE 1.6.1170. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
+> **Status: early access (0.7.x).** The trail mechanic works and is tested in game on AE 1.7.104. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
 
 ---
 
@@ -54,7 +54,7 @@ Trackers walk with vanilla AI packages and pathfinding; the plugin only decides 
 
 ## Requirements
 
-- Skyrim **Anniversary Edition 1.6.x** — tested on 1.6.1170.
+- Skyrim **Anniversary Edition 1.6.x and 1.7.x** — tested on 1.7.104; 1.6.x is expected to work but untested.
 - Skyrim Special Edition 1.5.97 — expected to work (Address Library based), **not tested**.
 - [SKSE64](https://skse.silverlock.org/) matching your runtime
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
@@ -81,7 +81,8 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 |---|---|---|
 | `enabled` | `true` | Record footprints at all |
 | `min_spacing` | `64` | Distance between two recorded footprints |
-| `max_footprints` | `2048` | Footprints kept in memory (roughly 10–20 minutes of walking); the oldest go first |
+| `max_footprints` | `2048` | Footprints kept in memory; beyond that the older half of the trail is thinned out |
+| `thin_spacing` | `256` | Distance between footprints kept in a thinned-out part of the trail |
 | `poll_interval_ms` | `250` | Fallback position sampling when no footstep events arrive |
 | `halflife_hours` | `2.0` | Game hours until a footprint is half as visible |
 | `weather_halflife_mult` | `0.35` | Half-life multiplier in rain or snow (exteriors) |
@@ -100,6 +101,7 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 | `interval_ms` | `1000` | How often trackers are updated |
 | `notice_radius` | `350` | An NPC notices a footprint only this close… |
 | `notice_fov` | `120` | …and inside this view cone (degrees, full width) |
+| `notice_line_of_sight` | `true` | …and not hidden behind a wall or a rock |
 | `caution_level` | `70` | Detection of you (0–100) at which a hostile counts as suspicious |
 | `after_combat_seconds` | `60` | A hostile that fought you stays suspicious this long after the fight |
 | `require_hostile` | `true` | Only NPCs hostile to you track |
@@ -159,7 +161,6 @@ The trace records your position, every nearby NPC's state and every decision the
 
 ## Known limitations
 
-- NPCs can notice a footprint behind a wall or rock if it is in front of them and close.
 - Trackers do not speak alert lines of their own.
 - Animals never track (planned together with scent).
 

@@ -6,7 +6,7 @@
   "archive_previous": true,
   "name": "Stealth Senses",
   "category": "main",
-  "description": "Early access. SKSE plugin, no ESP. Tested on AE 1.6.1170; SE 1.5.97 should work but is untested. Requires SKSE and Address Library.",
+  "description": "Early access. SKSE plugin, no ESP. Tested on AE 1.7.104; AE 1.6.x and SE 1.5.97 should work but are untested. Requires SKSE and Address Library.",
   "version": {"file": "CMakeLists.txt", "regex": "^project[(]StealthSenses VERSION ([0-9.]+)"},
   "changelog": "CHANGELOG.md",
   "archive": "cmake-build-release/StealthSenses.zip",

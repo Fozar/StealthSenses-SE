@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 — 2026-10-06
+
+No gameplay changes.
+
+- **License** — Stealth Senses is now released under the GNU GPL v3.0 (or later), as required by CommonLibSSE-NG it is built on. The license text is included as `LICENSE.txt`; the full source code is at https://github.com/Fozar/StealthSenses-SE.
+
 ## 0.7.0 — 2026-10-06
 
 First public version (early access). Footprints as evidence for the AI:

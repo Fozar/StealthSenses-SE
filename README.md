@@ -2,7 +2,7 @@
 
 An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns your footprints into evidence. Hostile NPCs who have reason to be suspicious can notice the trail you leave, read it, and follow it — bending down to examine a print, losing it on bare rock, casting around to pick it up again, and eventually walking straight into your hiding place.
 
-**Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163
+**Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163 · **Source:** https://github.com/Fozar/StealthSenses-SE
 
 > **Status: early access (0.7.x).** The trail mechanic works and is tested in game on AE 1.6.1170. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
 

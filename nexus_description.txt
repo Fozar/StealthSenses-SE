@@ -88,7 +88,7 @@ The trace records your character's position, nearby NPCs and every decision the 
 
 [font=Tahoma]Stealth Senses is free software under the [url=https://www.gnu.org/licenses/gpl-3.0.html]GNU General Public License v3.0[/url] (or later), because it is built on [url=https://github.com/alandtse/CommonLibVR]CommonLibSSE-NG[/url], which is GPL-3.0. The full license text is included in the download as [font=Courier New]LICENSE.txt[/font].
 
-[b]Source code:[/b] [url=TODO_GITHUB_URL]TODO_GITHUB_URL[/url]
+[b]Source code:[/b] [url=https://github.com/Fozar/StealthSenses-SE]https://github.com/Fozar/StealthSenses-SE[/url]
 
 You are free to use, modify and redistribute this mod, including in modlists and translations, as long as derived works are released under GPL-3.0 together with their source code.
 

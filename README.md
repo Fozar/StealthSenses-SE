@@ -181,7 +181,7 @@ To copy the DLL into a mod manager folder after every build, set `STEALTHSENSES_
   "version": 6,
   "configurePresets": [
     { "name": "dev-mo2", "inherits": "dev",
-      "cacheVariables": { "STEALTHSENSES_DEPLOY_DIR": "D:/Modding/MO2/mods/StealthSenses/SKSE/Plugins" } }
+      "cacheVariables": { "STEALTHSENSES_DEPLOY_DIR": "C:/MO2/mods/StealthSenses/SKSE/Plugins" } }
   ]
 }
 ```

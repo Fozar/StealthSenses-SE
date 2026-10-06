@@ -67,8 +67,8 @@ add_library(DirectXTKHeaders INTERFACE)
 target_include_directories(DirectXTKHeaders INTERFACE "${directxtk_SOURCE_DIR}/Inc")
 add_library(Microsoft::DirectXTK ALIAS DirectXTKHeaders)
 
-# CommonLibSSE-NG — maintained fork (alandtse/CommonLibVR, "ng" line). Same tag as
-# DragonbornPresence-SE: known to build with this toolchain and to handle AE 1.7.x.
+# CommonLibSSE-NG — maintained fork (alandtse/CommonLibVR, "ng" line). This tag is
+# known to build with this toolchain and to handle AE 1.7.x.
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     CommonLibSSE
@@ -137,7 +137,7 @@ add_custom_command(TARGET StealthSenses POST_BUILD
 )
 
 # Dev deploy: copy the DLL into a mod manager folder after each build,
-# e.g. -DSTEALTHSENSES_DEPLOY_DIR=D:/Modding/MO2/mods/StealthSenses/SKSE/Plugins.
+# e.g. -DSTEALTHSENSES_DEPLOY_DIR=C:/MO2/mods/StealthSenses/SKSE/Plugins.
 # The config is not copied: the deployed one holds test settings.
 set(STEALTHSENSES_DEPLOY_DIR "" CACHE PATH "Copy the built DLL here after each build (empty = off)")
 if(STEALTHSENSES_DEPLOY_DIR)

@@ -19,7 +19,7 @@
 #include <nlohmann/json.hpp>
 
 // Structured trace for offline analysis: StealthSenses.trace.jsonl next to the log, one JSON
-// object per line. Record types: player, npc, footprint, log, mark (see CLAUDE.md).
+// object per line. Record types: player, npc, footprint, log, mark (see docs/DEVELOPMENT.md, 1.4).
 // Game-thread only.
 namespace StealthSenses::Telemetry {
     void Open();

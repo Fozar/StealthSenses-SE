@@ -135,6 +135,10 @@ namespace StealthSenses::Config {
 #ifdef STEALTHSENSES_DEV
         Read(jd, "console", d.console);
         Read(jd, "log_footstep_tags", d.log_footstep_tags);
+        Read(jd, "key_track", d.key_track);
+        Read(jd, "key_body", d.key_body);
+        Read(jd, "key_paint", d.key_paint);
+        Read(jd, "key_reset", d.key_reset);
 #endif
         Read(jd, "mark_key", d.mark_key);
 

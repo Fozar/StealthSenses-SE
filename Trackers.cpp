@@ -812,10 +812,11 @@ namespace StealthSenses::Trackers {
             // fed with new footprints followed for good. The longer cooldown keeps it from taking
             // the same chase up again a moment later.
             const float fromStart = pos.GetDistance(state.startPos);
-            if (state.total >= cfg.give_up_seconds || fromStart >= cfg.leash_distance) {
+            const bool  tired     = state.total >= cfg.give_up_seconds;
+            if (tired || fromStart >= cfg.leash_distance) {
                 Drop(a_actor, state,
-                    state.total >= cfg.give_up_seconds ? std::format("got tired ({:.0f}s on the trail)", state.total)
-                                                       : std::format("went too far ({:.0f} from where it started)", fromStart),
+                    tired ? std::format("got tired ({:.0f}s on the trail)", state.total)
+                          : std::format("went too far ({:.0f} from where it started)", fromStart),
                     cfg.tired_cooldown);
                 seen.erase(id);
                 return RE::BSContainer::ForEachResult::kContinue;
@@ -874,13 +875,18 @@ namespace StealthSenses::Trackers {
                     next = fp;
                 }
             }
-            // Across a gap only clear footprints: a faint one is not seen from a distance
-            bool gap = false;
+            // Across a gap only clear footprints: a faint one is not seen from a distance. Following a
+            // trail, the continuation is the first footprint after the gap; with no trail yet
+            // (lastSeq 0: started from a body) the freshest one — the first was the player's oldest
+            // print near the body, 2468 units off (test 0.8)
+            bool       gap      = false;
+            const bool freshest = state.lastSeq == 0;
             if (!next) {
                 for (const auto& c : candidates) {
                     const auto* fp = c.fp;
                     if (c.clear && fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
-                        std::abs(fp->pos.z - state.trailPos.z) <= kMaxDz && (!next || fp->seq < next->seq)) {
+                        std::abs(fp->pos.z - state.trailPos.z) <= kMaxDz &&
+                        (!next || (freshest ? fp->seq > next->seq : fp->seq < next->seq))) {
                         next = fp;
                         gap  = true;
                     }
@@ -1002,6 +1008,98 @@ namespace StealthSenses::Trackers {
         }
         g_bodies.push_back({ a_corpse, calendar->GetHoursPassed() });
         Note(std::format("{} killed by {}, body remembered", Describe(corpse), Describe(killer)));
+    }
+
+    void DebugTrack(RE::Actor* a_actor) {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!g_ready || !a_actor || !player || a_actor == player) {
+            return;
+        }
+        // The nearest footprint in its space, readable or not: a test of following, not noticing
+        const auto              space = Trail::SpaceOf(a_actor);
+        const auto              pos   = a_actor->GetPosition();
+        const Trail::Footprint* best  = nullptr;
+        for (const auto& fp : Trail::Footprints()) {
+            if (fp.space == space && (!best || pos.GetDistance(fp.pos) < pos.GetDistance(best->pos))) {
+                best = &fp;
+            }
+        }
+        if (!best) {
+            Say(std::format("debug: no footprint in {}'s space", Describe(a_actor)));
+            return;
+        }
+        auto& state = g_trackers[a_actor->GetFormID()];
+        if (!Steer(player, a_actor, state, *best)) {
+            g_trackers.erase(a_actor->GetFormID());
+            return;
+        }
+        if (Config::Get().tracker.require_hostile && !a_actor->IsHostileToActor(player)) {
+            Say(std::format("debug: {} is not hostile, require_hostile will drop it next tick", Describe(a_actor)));
+        }
+    }
+
+    void DebugFindBody(RE::Actor* a_actor) {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!g_ready || !a_actor || !player || a_actor == player || a_actor->IsDead()) {
+            return;
+        }
+        const auto pos  = a_actor->GetPosition();
+        RE::Actor* body = nullptr;
+        for (const auto& known : g_bodies) {
+            auto* corpse = RE::TESForm::LookupByID<RE::Actor>(known.corpse);
+            if (corpse && corpse->Is3DLoaded() && Trail::SpaceOf(corpse) == Trail::SpaceOf(a_actor) &&
+                (!body || pos.GetDistance(corpse->GetPosition()) < pos.GetDistance(body->GetPosition()))) {
+                body = corpse;
+            }
+        }
+        if (!body) {
+            Say("debug: no body of the player's victims here (console: <ref>.kill player)");
+            return;
+        }
+        const auto id = a_actor->GetFormID();
+        g_bodiesSeen.emplace(id, body->GetFormID());
+        g_foundBody[id] = Config::Get().tracker.body_found_seconds;
+        Say(std::format("debug: {} knows of the body of {}", Describe(a_actor), Describe(body)));
+        auto& state = g_trackers[id];
+        if (!Investigate(player, a_actor, state, body->GetPosition())) {
+            g_trackers.erase(id);
+        }
+    }
+
+    void DebugPaintTrail(RE::Actor* a_origin) {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        // In front of the given NPC (to test what it does with a trail under its nose), else the player
+        RE::Actor* from = a_origin ? a_origin : player;
+        if (!player || !from) {
+            return;
+        }
+        const auto  space = Trail::SpaceOf(from);
+        const float angle = from->GetAngleZ();  // 0 = north (+y), clockwise
+        const RE::NiPoint3 dir{ std::sin(angle), std::cos(angle), 0.0f };
+        auto        origin = from->GetPosition();
+        int         count  = 0;
+        // Every 64 units like real steps, from 2 m ahead to ~30 m; each point dropped onto the
+        // navmesh so it lies on walkable ground
+        for (float d = 128.0f; d <= 2100.0f; d += 64.0f) {
+            const auto point = SnapToNavmesh(player, origin + dir * d).value_or(origin + dir * d);
+            Trail::Inject(point, space, RE::MATERIAL_ID::kDirt, "painted");
+            ++count;
+        }
+        Say(std::format("debug: painted {} footprints ahead of {}", count, Describe(from)));
+    }
+
+    void DebugReset() {
+        for (auto& [id, state] : g_trackers) {
+            if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(id); actor && state.marker && !state.marker->IsDeleted()) {
+                Drop(actor, state, "debug reset", 0.0f);
+            }
+        }
+        g_trackers.clear();
+        g_memory.clear();
+        g_recentCombat.clear();
+        g_foundBody.clear();
+        g_bodiesSeen.clear();
+        Say(std::format("debug: reset — trackers released, memories and body reactions forgotten ({} bodies kept)", g_bodies.size()));
     }
 
     std::vector<KnownBody> Bodies() {

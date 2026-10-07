@@ -97,6 +97,13 @@ namespace StealthSenses::Config {
         int         mark_key          = 0x41;       // DirectInput scan code; 0x41 = F7, 0 = off
         STEALTHSENSES_DEV_SETTING(bool, console, true, "echo tracker decisions to the in-game console")
         STEALTHSENSES_DEV_SETTING(bool, log_footstep_tags, true, "log each new footstep tag with its thread")
+        // Test keys (DirectInput scan codes, 0 = off), on the numpad: vanilla binds F5/F9 (quick
+        // save/load) and the input is not consumed. Target: the console-selected NPC, else the one
+        // under the crosshair.
+        STEALTHSENSES_DEV_SETTING(int, key_track, 0x4F, "Num1: the NPC takes up the trail at the nearest footprint now")
+        STEALTHSENSES_DEV_SETTING(int, key_body, 0x50, "Num2: the NPC goes to the nearest body of the player's victims")
+        STEALTHSENSES_DEV_SETTING(int, key_paint, 0x51, "Num3: paint a fresh trail ~30 m ahead of the player")
+        STEALTHSENSES_DEV_SETTING(int, key_reset, 0x52, "Num0: release all trackers, forget memories and reactions")
 
         bool operator==(const DebugSettings&) const = default;
     };

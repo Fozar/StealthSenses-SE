@@ -121,20 +121,72 @@ namespace {
         }
     };
 
-    // Mark key: the tester flags a moment ("at mark 3 he turned back"); see Telemetry::Mark
+    // Dev test keys act on this NPC: the one selected in the console (click it with ~ open, works
+    // at any distance), else the one under the crosshair (activation range only)
+    RE::Actor* DebugTarget() {
+        if (const auto selected = RE::Console::GetSelectedRef(); selected && selected->As<RE::Actor>()) {
+            return selected->As<RE::Actor>();
+        }
+        if (const auto* pick = RE::CrosshairPickData::GetSingleton()) {
+            if (const auto ref = pick->GetActiveTarget().get(); ref && ref->As<RE::Actor>()) {
+                return ref->As<RE::Actor>();
+            }
+        }
+        return nullptr;
+    }
+
+    // Runs a test key's action on the game thread with the target NPC (or tells why not)
+    void OnDebugKey(void (*a_action)(RE::Actor*), const char* a_name) {
+        SKSE::GetTaskInterface()->AddTask([a_action, a_name]() {
+            auto* actor = DebugTarget();
+            if (!actor) {
+                RE::SendHUDMessage::ShowHUDMessage(std::format("StealthSenses: {} — select an NPC in the console or aim at one", a_name).c_str());
+                return;
+            }
+            RE::SendHUDMessage::ShowHUDMessage(std::format("StealthSenses: {} — {}", a_name, actor->GetName()).c_str());
+            a_action(actor);
+        });
+    }
+
+    // Mark key: the tester flags a moment ("at mark 3 he turned back"); see Telemetry::Mark.
+    // Dev build: test keys (Config.h, debug.key_*), compiled out of release.
     class InputSink final : public RE::BSTEventSink<RE::InputEvent*> {
     public:
         RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_events,
             RE::BSTEventSource<RE::InputEvent*>*) override {
-            const auto key = static_cast<std::uint32_t>(Config::Get().debug.mark_key);
-            if (!a_events || key == 0) {
+            if (!a_events) {
                 return RE::BSEventNotifyControl::kContinue;
             }
+            const auto& cfg = Config::Get().debug;
             for (auto* event = *a_events; event; event = event->next) {
                 const auto* button = event->AsButtonEvent();
-                if (button && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard &&
-                    button->GetIDCode() == key && button->IsDown()) {
+                if (!button || button->GetDevice() != RE::INPUT_DEVICE::kKeyboard || !button->IsDown()) {
+                    continue;
+                }
+                const auto key = static_cast<int>(button->GetIDCode());
+                if (key == cfg.mark_key && cfg.mark_key != 0) {
                     SKSE::GetTaskInterface()->AddTask([]() { Telemetry::Mark(); });
+                }
+                if constexpr (kDevBuild) {
+                    if (key == cfg.key_track && cfg.key_track != 0) {
+                        OnDebugKey(Trackers::DebugTrack, "track");
+                    } else if (key == cfg.key_body && cfg.key_body != 0) {
+                        OnDebugKey(Trackers::DebugFindBody, "go to the body");
+                    } else if (key == cfg.key_paint && cfg.key_paint != 0) {
+                        // In front of the NPC selected in the console, else of the player
+                        SKSE::GetTaskInterface()->AddTask([]() {
+                            const auto selected = RE::Console::GetSelectedRef();
+                            auto*      actor    = selected ? selected->As<RE::Actor>() : nullptr;
+                            RE::SendHUDMessage::ShowHUDMessage(actor ? "StealthSenses: painted a trail ahead of the selected NPC"
+                                                                     : "StealthSenses: painted a trail ahead");
+                            Trackers::DebugPaintTrail(actor);
+                        });
+                    } else if (key == cfg.key_reset && cfg.key_reset != 0) {
+                        SKSE::GetTaskInterface()->AddTask([]() {
+                            RE::SendHUDMessage::ShowHUDMessage("StealthSenses: reset");
+                            Trackers::DebugReset();
+                        });
+                    }
                 }
             }
             return RE::BSEventNotifyControl::kContinue;

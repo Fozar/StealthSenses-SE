@@ -161,6 +161,27 @@ namespace StealthSenses::Trail {
         g_trail.push_back(fp);
     }
 
+    void Inject(const RE::NiPoint3& a_pos, RE::FormID a_space, RE::MATERIAL_ID a_material, std::string_view a_source) {
+        const auto* calendar = RE::Calendar::GetSingleton();
+        if (!calendar || a_space == 0) {
+            return;
+        }
+        Footprint fp;
+        fp.pos       = a_pos;
+        fp.space     = a_space;
+        fp.gameHours = calendar->GetHoursPassed();
+        fp.material  = a_material;
+        fp.seq       = g_nextSeq++;
+        g_trail.push_back(fp);
+        const auto& cfg = Config::Get().trail;
+        if (g_trail.size() > static_cast<std::size_t>(cfg.max_footprints)) {
+            Thin(g_trail, cfg);
+        }
+        Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(a_pos) },
+            { "space", Telemetry::Hex(a_space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(a_material)) },
+            { "base", Visibility(fp, fp.gameHours, false) }, { "blood", false }, { "src", a_source } });
+    }
+
     bool FootstepEventsActive() {
         return Clock::now() - g_lastFootstepEvent < 1s;
     }

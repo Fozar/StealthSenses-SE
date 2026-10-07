@@ -44,6 +44,14 @@ namespace StealthSenses::Trackers {
     // summon was the killer, so NPCs of the same faction who see it become suspicious.
     void NoteKill(RE::FormID a_corpse, RE::FormID a_killer);
 
+    // Dev build test tools (debug keys): act at once, without the usual suspicion and notice
+    // conditions. A forced tracker still obeys the per-tick rules (combat, seeing the player,
+    // require_hostile drop it).
+    void DebugTrack(RE::Actor* a_actor);     // takes up the trail at the nearest footprint
+    void DebugFindBody(RE::Actor* a_actor);  // goes to the nearest body of the player's victims
+    void DebugPaintTrail(RE::Actor* a_origin); // a fresh dirt trail ~30 m ahead of the NPC (null: the player)
+    void DebugReset();                       // releases all trackers, forgets memories and reactions
+
     // Forgets trackers without touching the engine (revert/load: actors may be gone).
     void Clear();
 

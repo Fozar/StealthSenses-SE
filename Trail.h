@@ -59,6 +59,10 @@ namespace StealthSenses::Trail {
     // For serialization: append in order, assigns fresh seq values.
     void Restore(const Footprint& a_fp);
 
+    // Dev test tool: appends a footprint as if the player had just stepped there (fresh seq and
+    // game time, thinned like a real one). a_source is for logging ("painted").
+    void Inject(const RE::NiPoint3& a_pos, RE::FormID a_space, RE::MATERIAL_ID a_material, std::string_view a_source);
+
     // True if a player footstep event arrived within the last second; the poll sampler
     // only records while footstep events are silent.
     bool FootstepEventsActive();

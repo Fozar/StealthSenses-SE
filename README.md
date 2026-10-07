@@ -138,6 +138,14 @@ The trace records your position, every nearby NPC's state and every decision the
 - Trackers do not speak alert lines of their own.
 - Animals never track (planned together with scent).
 
+## FAQ
+
+**Who can track me?** Only humanoid NPCs, the ones whose race has the vanilla `ActorTypeNPC` keyword: all playable races (vampire variants included), Dremora and Snow Elves. Dwarven automatons, Falmer, draugr and skeletons, hagravens, spriggans, giants, trolls, rieklings, werewolves, animals, dragons and other daedra never do. Races from mods track if they carry `ActorTypeNPC`, which playable-race mods almost always do.
+
+**Does it work with Footprints, Dynamic Footprints or Dynamic Terrain Deformation?** Yes, alongside them; it replaces nothing. Those mods draw prints you can see; Stealth Senses draws nothing and keeps its own invisible trail for the AI. The two are separate: a print you see is not necessarily one an enemy reads, and on stone, where you see none, a tracker can still make out a faint one up close.
+
+**Special Edition 1.5.97?** The same DLL supports SE 1.5.97 and AE through Address Library, so it should work; it is tested on AE 1.7.104 only. You need SKSE 2.0.20 and the SE version of Address Library. If you try it, please report how it went.
+
 ---
 
 ## Building from source

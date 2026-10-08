@@ -1,0 +1,311 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Mod page images, 1920x1080: promo.html#features (what the mod does), promo.html#hunt (how a tracker reads a trail).
+     Kept general on purpose (no numbers, no versions); update when a feature listed here changes. See README.md -->
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@1,500&family=Inter:wght@400;500;600&display=block" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0a101c; }
+  #stage { position: relative; width: 1920px; height: 1080px; }
+  svg.layer { position: absolute; left: 0; top: 0; }
+  .title { font-family: 'Cinzel', Georgia, serif; font-weight: 700; letter-spacing: 0.08em; }
+  .small { font-family: 'Cinzel', Georgia, serif; font-weight: 500; letter-spacing: 0.32em; }
+  .sub { font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 500; }
+  .body { font-family: 'Inter', 'Segoe UI', sans-serif; }
+
+  .head { position: absolute; left: 0; right: 0; top: 66px; text-align: center; color: #f1f4fa; }
+  .head .small { font-size: 21px; color: #d6b06e; }
+  .head .title { font-size: 74px; margin-top: 14px; text-shadow: 0 6px 30px rgba(0,0,0,.5); }
+  .head .rule { width: 520px; height: 1.5px; margin: 18px auto 16px;
+                background: linear-gradient(90deg, transparent, #d6b06e, transparent); opacity: .75; }
+  .head .sub { font-size: 36px; color: #d3dbe8; }
+
+  /* #features: four panels */
+  .panels { position: absolute; top: 396px; left: 0; right: 0; display: flex; justify-content: center; gap: 32px; }
+  .panel { width: 410px; height: 520px; box-sizing: border-box; border-radius: 16px; overflow: hidden;
+           background: linear-gradient(180deg, rgba(20,29,48,.86), rgba(11,16,28,.92));
+           box-shadow: 0 24px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(214,176,110,.22); }
+  .panel svg { display: block; }
+  .panel .txt { padding: 26px 30px 0; }
+  .panel .k { font-size: 15px; color: #d6b06e; letter-spacing: .3em; }
+  .panel h3 { margin: 10px 0 14px; font-size: 31px; color: #f1f4fa; letter-spacing: .06em; }
+  .panel p { margin: 0; font-size: 18.5px; line-height: 1.55; color: #c3ccdc; }
+
+  /* #hunt: numbered stages along the trail */
+  .stage-cap { position: absolute; width: 270px; text-align: center; transform: translateX(-50%); color: #f1f4fa; }
+  .stage-cap .n { font-family: 'Cinzel', Georgia, serif; font-weight: 700; font-size: 20px; color: #0b1120;
+                  display: inline-block; width: 38px; height: 38px; line-height: 38px; border-radius: 50%;
+                  background: #d6b06e; box-shadow: 0 0 0 4px rgba(214,176,110,.25), 0 6px 18px rgba(0,0,0,.5); }
+  .stage-cap h4 { margin: 10px 0 6px; font-family: 'Cinzel', Georgia, serif; font-size: 23px; letter-spacing: .05em;
+                  text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+  .stage-cap p { margin: 0; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 17px; line-height: 1.45; color: #d3dbe8;
+                 text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  .foot { position: absolute; left: 0; right: 0; bottom: 46px; text-align: center; font-size: 30px; color: #d3dbe8; }
+</style></head>
+<body><div id="stage">
+<svg id="bg" class="layer" xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"></svg>
+<svg id="scene" class="layer" xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"></svg>
+<div class="head" id="head"></div>
+<div id="content"></div>
+</div>
+<script>
+const W = 1920, H = 1080, NS = 'http://www.w3.org/2000/svg';
+const MODE = location.hash.slice(1) || 'features';
+const GOLD = '#d6b06e', LAMP = '#ffb453', INK = '#070b14';
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e); return e;
+}
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+// Shared defs: the boot sole from the cover, soft blurs, ground textures. Every SVG on the page gets its own copy
+// (ids are document-wide, so the copies are identical and any of them resolves).
+const DEFS = `
+  <symbol id="boot" viewBox="-17 -43 34 86" overflow="visible">
+    <path d="M -11 -10 C -14 -28 -7 -43 2 -42 C 12 -41 15 -27 12 -9 C 10 3 9 7 9 12 L -9 12 C -9 6 -9 1 -11 -10 Z"/>
+    <path d="M -9 19 C -10 30 -6 42 0 42 C 6 42 10 31 9 19 Z"/>
+  </symbol>
+  <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="0.9"/></filter>
+  <filter id="snowfill" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>
+  <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="9"/></filter>
+  <filter id="blur4" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+  <filter id="drift" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.0022 0.02" numOctaves="4" seed="11"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 0.86  0 0 0 0 0.91  0 0 0 0 1  0 0 0 0.45 -0.14"/>
+  </filter>
+  <filter id="rock" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" seed="4"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 0.42  0 0 0 0 0.45  0 0 0 0 0.5  0 0 0 0.5 0"/>
+  </filter>
+  <filter id="grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 0.9  0 0 0 0 0.93  0 0 0 0 1  0 0 0 0.07 0"/>
+  </filter>
+  <radialGradient id="lampGlow"><stop offset="0" stop-color="${LAMP}" stop-opacity=".5"/><stop offset=".4" stop-color="#e98a32" stop-opacity=".14"/><stop offset="1" stop-color="#e98a32" stop-opacity="0"/></radialGradient>
+  <linearGradient id="snowPanel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a4a67"/><stop offset="1" stop-color="#7d90b0"/></linearGradient>`;
+function defs(svg) { el('defs', {}, svg).innerHTML = DEFS; }
+
+// A print pressed into snow: dark hollow, snow-filled rim; `fresh` 0..1, `tint` for blood
+function print(parent, x, y, angle, left, size, fresh, tint) {
+  const w = 34 * size, h = 86 * size;
+  const g = el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${angle.toFixed(1)}) scale(${left ? -1 : 1} 1)` }, parent);
+  el('use', { href: '#boot', x: -w / 2, y: -h / 2, width: w, height: h, fill: tint || '#1a2438', 'fill-opacity': 0.12 + 0.68 * fresh, filter: 'url(#soft)' }, g);
+  el('use', { href: '#boot', x: -w / 2 + 1.5, y: -h / 2 - 1.5, width: w - 2, height: h - 2, fill: '#c9d6ea', 'fill-opacity': 0.1 + 0.4 * (1 - fresh), filter: 'url(#snowfill)' }, g);
+}
+// Prints along a path, alternating feet. opts: { size, spacing, from, to, fresh(s,len) -> 0..1, tint(s,len) }
+function trail(parent, path, o) {
+  const len = path.getTotalLength();
+  let i = 0;
+  for (let s = o.from ?? 0; s < (o.to ?? len); s += o.spacing, i++) {
+    const p = path.getPointAtLength(s), q = path.getPointAtLength(Math.min(len, s + 3));
+    const nx = -(q.y - p.y), ny = q.x - p.x, nl = Math.hypot(nx, ny) || 1, side = i % 2 ? 1 : -1;
+    const f = o.fresh(s, len);
+    if (f <= 0) continue;
+    print(parent, p.x + nx / nl * 17 * o.size * side, p.y + ny / nl * 17 * o.size * side,
+          Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI + 90, side < 0, o.size, f, o.tint && o.tint(s, len));
+  }
+}
+// Hooded tracker bent towards the ground, lantern held low in front (from the cover). (x, y) = lantern.
+function hunter(parent, x, y, k = 1, flip = false) {
+  const g = el('g', { transform: `translate(${x} ${y}) scale(${flip ? -k : k} ${k})` }, parent);
+  el('circle', { r: 70, fill: 'url(#lampGlow)' }, g);
+  el('circle', { r: 26, fill: LAMP, 'fill-opacity': .35, filter: 'url(#glow)' }, g);
+  const fx = -34, fy = 6;
+  el('ellipse', { cx: fx, cy: fy + 41, rx: 34, ry: 6, fill: INK, 'fill-opacity': .35, filter: 'url(#soft)' }, g);
+  el('path', { d: `M ${fx - 22} ${fy + 40} C ${fx - 20} ${fy + 8}, ${fx - 16} ${fy - 30}, ${fx - 2} ${fy - 52}
+                   C ${fx + 4} ${fy - 64}, ${fx + 18} ${fy - 64}, ${fx + 22} ${fy - 52}
+                   C ${fx + 26} ${fy - 42}, ${fx + 22} ${fy - 34}, ${fx + 14} ${fy - 28}
+                   C ${fx + 24} ${fy - 16}, ${fx + 32} ${fy - 6}, ${fx + 34} ${fy} L ${fx + 30} ${fy + 2}
+                   C ${fx + 22} ${fy - 6}, ${fx + 16} ${fy - 10}, ${fx + 12} ${fy - 12}
+                   C ${fx + 16} ${fy + 6}, ${fx + 20} ${fy + 24}, ${fx + 22} ${fy + 40} Z`, fill: INK, 'fill-opacity': .94 }, g);
+  el('line', { x1: fx + 32, y1: fy + 1, x2: 0, y2: -8, stroke: INK, 'stroke-width': 1.5 }, g);
+  el('circle', { r: 7, fill: '#ffe2b0' }, g);
+  return g;
+}
+// Stone: a flat shape with the rock noise clipped to it (a filter alone fills its whole bounding box)
+function clipped(parent, d, fill, id) {
+  el('path', { d }, el('clipPath', { id }, el('defs', {}, parent)));
+  const g = el('g', { 'clip-path': `url(#${id})` }, parent);
+  el('rect', { width: W, height: H, fill }, g);
+  el('rect', { width: W, height: H, filter: 'url(#rock)' }, g);
+}
+function dashed(parent, d, color = LAMP, w = 3) {
+  return el('path', { d, fill: 'none', stroke: color, 'stroke-width': w, 'stroke-dasharray': '2 12', 'stroke-linecap': 'round', 'stroke-opacity': .85 }, parent);
+}
+
+// ---------- background: night snowfield, as on the cover ----------
+const bg = document.getElementById('bg');
+defs(bg);
+el('defs', {}, bg).innerHTML = `
+  <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#070b15"/><stop offset=".3" stop-color="#121b2e"/><stop offset=".62" stop-color="#2c3b57"/><stop offset="1" stop-color="#4d607f"/>
+  </linearGradient>
+  <radialGradient id="moon" cx="1560" cy="60" r="760" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9fb5d6" stop-opacity=".2"/><stop offset="1" stop-color="#9fb5d6" stop-opacity="0"/></radialGradient>
+  <linearGradient id="groundMask" x1="0" y1="0" x2="0" y2="1"><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#fff" stop-opacity="1"/></linearGradient>
+  <mask id="onGround"><rect width="${W}" height="${H}" fill="url(#groundMask)"/></mask>
+  <radialGradient id="vignette" cx="50%" cy="50%" r="76%"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".62"/></radialGradient>`;
+el('rect', { width: W, height: H, fill: 'url(#ground)' }, bg);
+el('rect', { width: W, height: H, fill: 'url(#moon)' }, bg);
+el('rect', { width: W, height: H, filter: 'url(#drift)', mask: 'url(#onGround)', opacity: .8 }, bg);
+const flakes = el('g', { filter: 'url(#soft)' }, bg);
+for (let i = 0; i < 160; i++) el('circle', { cx: rnd() * W, cy: rnd() * H, r: .7 + rnd() * 1.9, fill: '#eef2fa', opacity: (.12 + rnd() * .4).toFixed(2) }, flakes);
+
+const head = document.getElementById('head'), content = document.getElementById('content'), scene = document.getElementById('scene');
+defs(scene);
+
+// ---------- #features ----------
+if (MODE === 'features') {
+  head.innerHTML = `<div class="small">STEALTH SENSES · SKSE PLUGIN · SKYRIM SE / AE</div>
+    <div class="title">YOUR TRAIL TELLS ON YOU</div><div class="rule"></div>
+    <div class="sub">Every step leaves a mark. Someone may read it.</div>`;
+  const PANELS = [
+    ['I', 'Your trail', 'Every step leaves a print. Soft ground holds it, stone barely does. Time, rain and snow wash it away; blood makes it last.', drawTrail],
+    ['II', 'Trackers', 'A wary enemy who spots a print takes up the trail: follows it, kneels to read it, searches where it runs out.', drawTracker],
+    ['III', 'Bodies', 'Leave one of their own lying in the snow, and the others come to look. From the body, they look for you.', drawBody],
+    ['IV', 'Vanilla at heart', 'No ESP. Trackers walk with the game’s own AI and pathfinding, and the moment they see you, the fight is vanilla.', drawEye],
+  ];
+  content.innerHTML = `<div class="panels">${PANELS.map(([k, t, p]) =>
+    `<div class="panel"><svg width="410" height="260" viewBox="0 0 410 260"></svg>
+     <div class="txt"><div class="small k">${k}</div><h3 class="title">${t.toUpperCase()}</h3><p class="body">${p}</p></div></div>`).join('')}</div>`;
+  document.querySelectorAll('.panel svg').forEach((svg, i) => {
+    defs(svg);
+    el('rect', { width: 410, height: 260, fill: 'url(#snowPanel)' }, svg);
+    el('rect', { width: 410, height: 260, filter: 'url(#drift)', opacity: .7 }, svg);
+    PANELS[i][3](svg);
+    el('rect', { y: 200, width: 410, height: 60, fill: 'url(#panelFade)' }, svg);
+  });
+  el('defs', {}, document.querySelector('.panel svg')).innerHTML =
+    `<linearGradient id="panelFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#141d30" stop-opacity="0"/><stop offset="1" stop-color="#141d30" stop-opacity=".9"/></linearGradient>`;
+}
+
+// I — prints walk from snow onto stone and fade; the first ones are bloody
+function drawTrail(svg) {
+  clipped(svg, 'M 228 0 C 210 70 250 150 222 260 L 410 260 L 410 0 Z', '#5c6678', 'panelStone');
+  for (const d of ['M 260 40 l 30 18 l 22 -6', 'M 300 150 l 26 -14 l 40 10', 'M 250 210 l 34 6', 'M 350 70 l 20 26'])
+    el('path', { d, fill: 'none', stroke: '#2e3646', 'stroke-width': 2, 'stroke-opacity': .7 }, svg);
+  const path = el('path', { d: 'M 20 200 C 110 190 150 110 230 120 S 350 140 400 90', fill: 'none' }, svg);
+  trail(svg, path, { size: .62, spacing: 30, from: 8,
+    fresh: (s, len) => s / len < .5 ? 1 : Math.max(.05, .35 - (s / len - .5) * .6),
+    tint: (s, len) => s / len < .22 ? '#6b1a1a' : null });
+  const sn = el('g', { filter: 'url(#soft)' }, svg);
+  for (let i = 0; i < 40; i++) el('circle', { cx: rnd() * 410, cy: rnd() * 200, r: .8 + rnd() * 1.6, fill: '#f2f5fb', opacity: (.3 + rnd() * .5).toFixed(2) }, sn);
+}
+// II — a hunter with a lantern behind the prints, dashed line up to it
+function drawTracker(svg) {
+  const path = el('path', { d: 'M 70 215 C 150 200 170 140 240 130 S 340 110 390 50', fill: 'none' }, svg);
+  trail(svg, path, { size: .6, spacing: 30, from: 110, fresh: (s, len) => .45 + .55 * s / len });
+  const len = path.getTotalLength();
+  let d = '';
+  for (let t = 0; t <= 110; t += 5) { const p = path.getPointAtLength(t); d += (t ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1); }
+  dashed(svg, d, LAMP, 2.5);
+  const h = path.getPointAtLength(100);
+  hunter(svg, h.x, h.y - 6, .9);
+}
+// III — a body in the snow; a tracker kneels by it, prints lead away
+function drawBody(svg) {
+  const away = el('path', { d: 'M 210 150 C 270 140 300 100 400 70', fill: 'none' }, svg);
+  trail(svg, away, { size: .55, spacing: 28, from: 40, fresh: () => .8 });
+  el('ellipse', { cx: 180, cy: 170, rx: 90, ry: 22, fill: '#5a1616', 'fill-opacity': .5, filter: 'url(#blur4)' }, svg);
+  const b = el('g', { transform: 'translate(180 160) rotate(-8)', fill: INK, 'fill-opacity': .92 }, svg);
+  el('path', { d: 'M -70 4 C -60 -12 -10 -14 30 -10 C 46 -9 52 -2 52 6 C 52 14 40 18 30 16 C -10 14 -60 18 -70 4 Z' }, b);
+  el('circle', { cx: 66, cy: 0, r: 13 }, b);
+  el('path', { d: 'M -10 -10 C 0 -28 22 -32 34 -26 L 30 -20 C 18 -24 6 -20 0 -8 Z' }, b);
+  el('path', { d: 'M 88 4 L 120 -4 L 122 2 L 90 10 Z', 'fill-opacity': .7 }, b);   // dropped blade
+  hunter(svg, 120, 100, .85, true);
+}
+// IV — the sneak eye wide open: vanilla takes over
+function drawEye(svg) {
+  const g = el('g', { transform: 'translate(205 112)' }, svg);
+  el('circle', { r: 120, fill: 'url(#lampGlow)' }, g);
+  el('path', { d: 'M -120 0 C -70 -64 70 -64 120 0 C 70 64 -70 64 -120 0 Z', fill: INK, 'fill-opacity': .88, stroke: GOLD, 'stroke-width': 3 }, g);
+  el('circle', { r: 38, fill: 'none', stroke: GOLD, 'stroke-width': 3 }, g);
+  el('circle', { r: 30, fill: LAMP, 'fill-opacity': .25, filter: 'url(#glow)' }, g);
+  el('circle', { r: 16, fill: '#ffe2b0' }, g);
+  for (const a of [-150, -120, -90, -60, -30])
+    el('line', { x1: Math.cos(a * Math.PI / 180) * 92, y1: Math.sin(a * Math.PI / 180) * 70 - 6,
+                 x2: Math.cos(a * Math.PI / 180) * 118, y2: Math.sin(a * Math.PI / 180) * 92 - 8,
+                 stroke: GOLD, 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-opacity': .8 }, g);
+}
+
+// ---------- #hunt ----------
+if (MODE === 'hunt') {
+  head.innerHTML = `<div class="small">STEALTH SENSES · HOW A TRACKER HUNTS</div>
+    <div class="title">THEY FOLLOW WHERE YOU WALKED</div><div class="rule"></div>
+    <div class="sub">Seen from above: one hunt, from the first print to the last.</div>`;
+  // ground: a band of snow with a stone outcrop the trail crosses
+  const stone = 'M 1010 470 C 1080 420 1200 430 1260 470 C 1320 520 1310 640 1270 700 C 1220 770 1100 780 1040 730 C 980 680 960 530 1010 470 Z';
+  const rocks = 'M 1800 330 C 1850 300 1905 330 1900 380 C 1896 420 1850 440 1815 425 C 1785 410 1775 350 1800 330 Z ' +
+                'M 1855 445 C 1880 432 1910 450 1904 476 C 1898 498 1866 500 1852 486 C 1840 472 1842 452 1855 445 Z';
+  clipped(scene, stone, '#5a6475', 'stoneClip');
+  for (const d of ['M 1040 520 l 40 30 l 30 -8', 'M 1120 640 l 46 -20 l 50 14', 'M 1060 690 l 50 12', 'M 1200 500 l 26 40 l -6 30'])
+    el('path', { d, fill: 'none', stroke: '#2b3242', 'stroke-width': 2.5, 'stroke-opacity': .7 }, scene);
+  // rocks for you to hide behind
+  el('path', { d: rocks, fill: INK, 'fill-opacity': .4, transform: 'translate(-10 14)', filter: 'url(#blur4)' }, scene);
+  clipped(scene, rocks, '#3e4757', 'rocksClip');
+
+  // your route: left to right, across the stone, to the rocks
+  const route = el('path', { d: 'M 60 820 C 260 830 330 700 500 690 S 760 740 900 650 S 1080 560 1160 600 S 1330 700 1440 600 S 1640 420 1830 400', fill: 'none' }, scene);
+  const len = route.getTotalLength();
+  const at = f => route.getPointAtLength(f * len);
+  const STONE_FROM = .50, STONE_TO = .66, END = .95;
+  trail(scene, route, { size: .78, spacing: 40, from: 10, to: END * len,
+    fresh: (s, l) => { const f = s / l; return f > STONE_FROM && f < STONE_TO ? 0 : .25 + .65 * f; } });
+
+  // you, crouched behind the rocks
+  const you = at(END);
+  el('circle', { cx: you.x, cy: you.y, r: 15, fill: INK, stroke: '#e9eef7', 'stroke-width': 2.5 }, scene);
+  el('text', { x: you.x, y: you.y + 48, 'text-anchor': 'middle', class: 'small', 'font-size': 18, fill: '#e9eef7' }, scene).textContent = 'YOU';
+
+  // the tracker's way: on the trail up to the stone, a search loop past it, back on the trail
+  const T = el('g', {}, scene);
+  let d = '';
+  for (let f = .14; f <= STONE_TO - .02; f += .004) { const p = at(f); d += (d ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1); }
+  const lost = at(STONE_TO - .02);
+  const hops = [[lost.x + 90, lost.y + 130], [lost.x + 110, lost.y - 110], [lost.x + 230, lost.y - 20]];
+  for (const [x, y] of hops) d += `L ${x} ${y}`;
+  const back = at(.76);
+  d += `L ${back.x} ${back.y}`;
+  for (let f = .76; f <= .86; f += .004) { const p = at(f); d += `L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`; }
+  dashed(T, d, LAMP, 3.5);
+  for (const [x, y] of hops) {
+    el('circle', { cx: x, cy: y, r: 30, fill: 'none', stroke: LAMP, 'stroke-width': 2, 'stroke-opacity': .5, 'stroke-dasharray': '3 7' }, T);
+    el('circle', { cx: x, cy: y, r: 5, fill: LAMP, 'fill-opacity': .8 }, T);
+  }
+  const notice = at(.14);
+  el('path', { d: `M ${notice.x - 40} ${notice.y + 150} Q ${notice.x - 60} ${notice.y + 60} ${notice.x} ${notice.y}`, fill: 'none', stroke: LAMP, 'stroke-width': 2, 'stroke-dasharray': '6 8', 'stroke-opacity': .6 }, T);
+  // view cone of the tracker that notices the print
+  el('path', { d: `M ${notice.x - 40} ${notice.y + 150} L ${notice.x - 120} ${notice.y - 20} A 175 175 0 0 1 ${notice.x + 70} ${notice.y + 10} Z`, fill: LAMP, 'fill-opacity': .08 }, T);
+  const now = at(.86);
+  hunter(scene, now.x, now.y - 4, .95);
+
+  // numbered stages: [x, y of the marker, caption above (-1) or below (1), extra gap, title, text]
+  const kneel = at(.36);
+  const STAGES = [
+    [notice.x, notice.y, 1, 0, 'Notices a print', 'A wary enemy sees your print in front of it.'],
+    [at(.25).x, at(.25).y, -1, 0, 'Follows it', 'Print to print, weapon drawn.'],
+    [kneel.x, kneel.y, 1, 0, 'Reads the ground', 'Kneels to look at a print.'],
+    [at(.58).x, at(.58).y, 1, 150, 'Loses it on stone', 'Hard ground keeps almost nothing.'],
+    [hops[1][0], hops[1][1], -1, 0, 'Casts around', 'Searches where the trail ran out.'],
+    [now.x, now.y, 1, 70, 'Picks it up again', '…or gets tired and goes home.'],
+  ];
+  for (const [x, y, side, gap] of STAGES) {
+    if (gap) el('line', { x1: x, y1: y + 12, x2: x, y2: y + 34 + gap, stroke: GOLD, 'stroke-width': 1.5, 'stroke-opacity': .6 }, scene);
+    el('circle', { cx: x, cy: y, r: 11, fill: 'none', stroke: GOLD, 'stroke-width': 2.5 }, scene);
+    el('circle', { cx: x, cy: y, r: 4, fill: GOLD }, scene);
+  }
+  content.innerHTML = STAGES.map(([x, y, side, gap, t, p], i) => {
+    const top = side < 0 ? y - 200 - gap : y + 34 + gap;
+    return `<div class="stage-cap" style="left:${x}px;top:${top}px">
+      ${side < 0 ? `<h4>${t}</h4><p>${p}</p><div class="n" style="margin-top:12px">${i + 1}</div>`
+                 : `<div class="n">${i + 1}</div><h4>${t}</h4><p>${p}</p>`}</div>`;
+  }).join('') + `<div class="foot sub">Walk on stone, wade through water, keep out of sight, and it goes cold.</div>`;
+}
+
+// overlay on everything
+const overlay = el('svg', { class: 'layer', width: W, height: H, viewBox: `0 0 ${W} ${H}`, style: 'pointer-events:none' }, document.getElementById('stage'));
+el('defs', {}, overlay).innerHTML = `<radialGradient id="vig2" cx="50%" cy="50%" r="76%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>`;
+el('rect', { width: W, height: H, fill: 'url(#vig2)' }, overlay);
+el('rect', { width: W, height: H, filter: 'url(#grain)' }, overlay);
+</script>
+</body></html>

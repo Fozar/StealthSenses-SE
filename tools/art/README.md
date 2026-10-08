@@ -12,3 +12,13 @@ Both images are SVG drawn by a small script and rendered to PNG with headless Ed
 
 Fonts (Cinzel, Cormorant Garamond, Inter) come from Google Fonts; without network the pages fall back to Georgia / Segoe UI.
 Rendered results: `docs/media/cover.png`, `docs/media/banner-1300x372.png` (+ `-2600x744`), `docs/media/chase-map.png`.
+
+## Promo cards
+
+`promo.html` — two 1920×1080 mod page images, same night snowfield as the cover:
+- `promo.html#features` — what the mod does in four panels (trail, trackers, bodies, vanilla AI) → `docs/media/promo-features.png`;
+- `promo.html#hunt` — one hunt seen from above, numbered stages → `docs/media/promo-hunt.png`.
+
+Render both with `sh render.sh` (or `sh render.sh hunt`; `EDGE=` overrides the Edge path).
+The texts are deliberately general — no numbers, settings or versions — but they describe behaviour:
+**when a feature shown here is added, removed or changes how it looks to the player, update the card and re-render.**

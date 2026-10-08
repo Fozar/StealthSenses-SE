@@ -87,6 +87,13 @@ Skyrim VR is not supported.[/font]
 [/list]
 The trace records your character's position, nearby NPCs and every decision the mod makes — nothing else.[/font]
 
+[font=Tahoma][size=4][b]— More mods by Fozar —[/b][/size][/font]
+
+[font=Tahoma][list]
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/30810][b]Main Menu Design Replacer[/b][/url] — an old-school centred main menu on a translucent column, with smooth 60 fps animations.
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/25287][b]Dragonborn Presence[/b][/url] — Discord Rich Presence: your location, character, quest and what you are doing in Skyrim, live in Discord.
+[/list][/font]
+
 [font=Tahoma][size=4][b]— License and source code —[/b][/size][/font]
 
 [font=Tahoma]Stealth Senses is free software under the [url=https://www.gnu.org/licenses/gpl-3.0.html]GNU General Public License v3.0[/url] (or later), because it is built on [url=https://github.com/alandtse/CommonLibVR]CommonLibSSE-NG[/url], which is GPL-3.0. The full license text is included in the download as [font=Courier New]LICENSE.txt[/font].

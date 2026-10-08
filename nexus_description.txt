@@ -40,7 +40,7 @@ Only hostile humanoids track. Animals never do (yet).[/font]
 [*][b]Searches[/b] when the trail runs out — stops, looks around, then checks spots around the last print, first in the direction you were heading.
 [*][b]Picks the trail up again[/b] if it finds where it continues.
 [*][b]Gives up[/b] after about 45 seconds without a new print and goes back to its business — and after a few minutes of chasing, or once far from home, however fresh your prints are.
-[*]If it [b]spots you[/b] or a fight starts, the vanilla AI takes over at once.
+[*]If it [b]spots you[/b] or fights you, the vanilla AI takes over at once. A fight with someone else — a wolf on the road — only interrupts the chase: afterwards it goes back to your trail.
 [/list][/font]
 
 [font=Tahoma][size=4][b]— Requirements —[/b][/size][/font]

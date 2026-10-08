@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.1 — unreleased
+## 0.8.1 — 2026-10-08
 
 - **A fight is only an interruption** — a tracker that runs into a wolf, a bear or a guard on your trail fights it and then goes back to your trail where it left off, instead of forgetting it. A fight with you or your followers still hands it to the vanilla AI, and so does a fight longer than a minute. New option: `fight_pause_seconds`.
 

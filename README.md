@@ -13,7 +13,7 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 - **Your trail** — every step you take on foot leaves a footprint. Soft ground holds a clear print, stone barely any; prints fade over game time (faster in rain or snow), water breaks the trail, blood makes it last. The trail is saved with your game.
 - **Trackers** — a hostile humanoid with a reason to be suspicious that sees one of your prints in front of it takes up the trail: draws its weapon, follows print to print, bends down to examine one, searches where the trail runs out, and gives up after a while.
 - **Bodies** — an enemy that finds the body of one of its own you killed goes to it and looks for your trail from there.
-- **Vanilla AI stays in charge** — trackers walk with vanilla packages and pathfinding; one that spots you or starts a fight is handed back to the vanilla AI at once.
+- **Vanilla AI stays in charge** — trackers walk with vanilla packages and pathfinding; one that spots you or fights you (or your followers) is handed back to the vanilla AI at once. A fight with someone else — a wolf on the road — only interrupts the chase.
 
 The full description is on the [Nexus page](https://www.nexusmods.com/skyrimspecialedition/mods/194163).
 
@@ -78,6 +78,7 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 | `give_up_seconds` | `240` | A tracker gives up after this long on the trail, however fresh it is |
 | `leash_distance` | `6000` | …or once this far from where it started |
 | `tired_cooldown` | `180` | After giving up like that it takes up no trail for this long |
+| `fight_pause_seconds` | `60` | A tracker fighting someone else (a wolf) goes back to your trail after the fight if it lasted no longer than this (0 = drops the trail) |
 | `require_hostile` | `true` | Only NPCs hostile to you track |
 | `humanoids_only` | `true` | Only humanoids track (no animals) |
 | `include_combat` | `false` | Keep tracking NPCs that are in combat (they ignore packages; leave off) |

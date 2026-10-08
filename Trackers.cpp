@@ -93,6 +93,7 @@ namespace StealthSenses::Trackers {
             bool                             packageLost = false;
             float                            total      = 0.0f; // since it started tracking: gets tired
             RE::NiPoint3                     startPos;          // where it started: leash
+            float                            fight      = 0.0f; // > 0: fighting someone else, trail on hold
         };
 
         // Survives dropping a tracker: an NPC that lost the trail or saw the player does not
@@ -680,7 +681,7 @@ namespace StealthSenses::Trackers {
                     const auto& s = tracked->second;
                     npc["track"] = { { "seq", s.lastSeq }, { "target", Telemetry::Vec(s.target) },
                         { "trail", Telemetry::Vec(s.trailPos) }, { "mode", ModeName(s.mode) },
-                        { "since", s.sinceStep }, { "modeTime", s.modeTime }, { "hops", s.hops } };
+                        { "since", s.sinceStep }, { "modeTime", s.modeTime }, { "hops", s.hops }, { "fight", s.fight } };
                 }
                 Telemetry::Write(std::move(npc));
             }
@@ -690,8 +691,24 @@ namespace StealthSenses::Trackers {
             }
             if (combat && !cfg.include_combat) {
                 if (tracked != g_trackers.end()) {
-                    Drop(a_actor, tracked->second, "entered combat");
-                    g_trackers.erase(tracked);
+                    // A fight with someone else (a wolf on the road, a guard) only interrupts the
+                    // chase: the marker and the link stay (combat AI ignores packages), its clocks
+                    // stand still, and it goes back to the trail once the fight is over. A fight
+                    // with the player's side, or with nobody known (vanilla's "who's there"
+                    // search is combat too), is vanilla's business.
+                    auto*       target = a_actor->GetActorRuntimeData().currentCombatTarget.get().get();
+                    auto&       state  = tracked->second;
+                    const bool  other  = target && !IsPlayerSide(target, player);
+                    if (other && state.fight + a_deltaSeconds <= cfg.fight_pause_seconds) {
+                        if (state.fight == 0.0f) {
+                            Say(std::format("{} fights {}, keeps the trail at #{}", Describe(a_actor), Describe(target), state.lastSeq));
+                        }
+                        state.fight += std::max(a_deltaSeconds, 0.001f);
+                        seen.insert(id);
+                    } else {
+                        Drop(a_actor, state, other ? std::format("fought {} too long", Describe(target)) : "entered combat");
+                        g_trackers.erase(tracked);
+                    }
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
             }
@@ -802,6 +819,18 @@ namespace StealthSenses::Trackers {
             }
 
             auto& state = tracked->second;
+            if (state.fight > 0.0f) {
+                // The fight is over and the player is not in sight: back to where it was. The fight
+                // dragged it off and vanilla may have dropped the alert; the mode starts over.
+                Say(std::format("{} is done fighting ({:.0f}s), back to the trail at #{}", Describe(a_actor), state.fight, state.lastSeq));
+                state.fight      = 0.0f;
+                state.lastPos    = pos;
+                state.stuckTotal = 0.0f;
+                if (state.alertSet) {
+                    SetAlert(a_actor, true);
+                }
+                SetMode(a_actor, state, state.mode);
+            }
             state.sinceStep += a_deltaSeconds;
             state.modeTime += a_deltaSeconds;
             state.total += a_deltaSeconds;

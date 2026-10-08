@@ -79,6 +79,7 @@ namespace StealthSenses::Config {
         float       give_up_seconds    = 240.0f;  // a tracker gives up after this long on the trail, however fresh
         float       leash_distance     = 6000.0f; // ...or this far from where it started
         float       tired_cooldown     = 180.0f;  // no new trail for this long after giving up like that
+        float       fight_pause_seconds = 60.0f;  // a tracker fighting someone else (a wolf) keeps the trail this long (0 = drops it)
         bool        require_hostile  = true;
         bool        humanoids_only   = true;    // only ActorTypeNPC track (no rabbits on the trail)
         bool        include_combat   = false;

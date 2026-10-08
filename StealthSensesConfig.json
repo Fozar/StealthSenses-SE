@@ -47,6 +47,7 @@
         "give_up_seconds": 240.0,
         "leash_distance": 6000.0,
         "tired_cooldown": 180.0,
+        "fight_pause_seconds": 60.0,
         "require_hostile": true,
         "humanoids_only": true,
         "include_combat": false,

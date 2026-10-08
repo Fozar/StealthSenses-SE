@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 — unreleased
+
+- **A fight is only an interruption** — a tracker that runs into a wolf, a bear or a guard on your trail fights it and then goes back to your trail where it left off, instead of forgetting it. A fight with you or your followers still hands it to the vanilla AI, and so does a fight longer than a minute. New option: `fight_pause_seconds`.
+
 ## 0.8.0 — 2026-10-07
 
 - **Bodies** — an enemy that finds the body of one of its own you killed (or your follower or summon did) walks over to it, looks around, searches the area and takes up your trail if it is there. "Finds" means it saw the body — close, in front of it, not behind a wall — or the game already let it know of the death (it heard the kill) and its vanilla search is over. "One of its own" means a shared faction: bandit and bandit, a guard and a citizen of the same hold. A dead mudcrab, a comrade killed by wolves, a body older than a day or one far across the dungeon are ignored, and every NPC reacts to every body only once — also after loading a save. New options: `body_found_seconds`, `body_notice_radius`, `body_know_radius`, `body_max_age_hours`.

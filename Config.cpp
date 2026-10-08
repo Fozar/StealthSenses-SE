@@ -119,6 +119,7 @@ namespace StealthSenses::Config {
         Read(jk, "give_up_seconds", k.give_up_seconds);
         Read(jk, "leash_distance", k.leash_distance);
         Read(jk, "tired_cooldown", k.tired_cooldown);
+        Read(jk, "fight_pause_seconds", k.fight_pause_seconds);
         Read(jk, "require_hostile", k.require_hostile);
         Read(jk, "humanoids_only", k.humanoids_only);
         Read(jk, "include_combat", k.include_combat);

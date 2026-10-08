@@ -28,7 +28,8 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
         CHECK_MESSAGE(root["trail"].contains(key), key);
     }
     for (const char* key : { "notice_line_of_sight", "body_found_seconds", "body_notice_radius", "body_know_radius",
-             "body_max_age_hours", "give_up_seconds", "leash_distance", "tired_cooldown" }) {
+             "body_max_age_hours", "give_up_seconds", "leash_distance", "tired_cooldown",
+             "fight_pause_seconds" }) {
         CHECK_MESSAGE(root["tracker"].contains(key), key);
     }
 }

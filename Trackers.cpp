@@ -1016,7 +1016,12 @@ namespace StealthSenses::Trackers {
             // Already released by Drop when it got here through "lost the trail"
             if (marker && !marker->IsDeleted()) {
                 if (actor) {
-                    Drop(actor, it->second, "left the area");
+                    // Skipped this tick for a reason of its own: a wolf killed a tracker mid-fight
+                    // (test 0.8.1), or a debug-key tracker is not hostile
+                    const char* why = actor->IsDead()                                               ? "died" :
+                                      cfg.require_hostile && player && !actor->IsHostileToActor(player) ? "is not hostile" :
+                                                                                                          "left the area";
+                    Drop(actor, it->second, why);
                 } else {
                     // The actor is gone (deleted): the marker must not stay in the world and the save
                     Release(nullptr, marker.get(), 0);
@@ -1041,7 +1046,7 @@ namespace StealthSenses::Trackers {
 
     void DebugTrack(RE::Actor* a_actor) {
         auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!g_ready || !a_actor || !player || a_actor == player) {
+        if (!g_ready || !a_actor || !player || a_actor == player || a_actor->IsDead()) {
             return;
         }
         // The nearest footprint in its space, readable or not: a test of following, not noticing

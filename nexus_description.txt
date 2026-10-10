@@ -3,9 +3,9 @@
 
 [font=Tahoma]In vanilla Skyrim a bandit who loses sight of you forgets you were ever there. Stealth Senses gives the world a memory of where you walked. Every step you take leaves a footprint, and a suspicious enemy who comes across your trail will read it — bend down to look at a print, follow it from one to the next, lose it on bare rock, cast around to pick it up again, and walk right up to the bush you are hiding in.
 
-No .esp. No scripts. No edited records. Vanilla AI does the walking — the plugin only tells it where to look next.[/font]
+No .esp. No scripts. No edited records. Vanilla AI does the walking — the plugin only tells it where to look next, and lets a wary enemy see a little sharper.[/font]
 
-[font=Tahoma][b]Early access (0.7).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
+[font=Tahoma][b]Early access (0.9).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
 
 [font=Tahoma][size=4][b]— Your trail —[/b][/size][/font]
 
@@ -30,6 +30,10 @@ Only hostile humanoids track. Animals never do (yet).[/font]
 [font=Tahoma][size=4][b]— Bodies —[/b][/size][/font]
 
 [font=Tahoma]Leave a body where its friends will find it, and they come looking for you. A bandit who finds a fellow bandit you killed — sees the body, or heard the kill and has finished its vanilla search — walks over to it, looks around and searches the area, and takes up your trail if it is there. A dead mudcrab, a comrade killed by wolves or a day-old body sends no one after you.[/font]
+
+[font=Tahoma][size=4][b]— Sharper senses —[/b][/size][/font]
+
+[font=Tahoma]An enemy with a reason to be wary sees you a little sooner: one on your trail, one that just lost you in a fight, one that found a body. Its stealth meter on you reads a few points higher — enough to matter when you creep past, not enough to make sneaking pointless. In a fight nothing changes: the vanilla search after an arrow from the shadows is as easy to slip as ever. The bonuses are in the config ([font=Courier New]detection[/font] section) and can be turned off.[/font]
 
 [font=Tahoma][size=4][b]— What a tracker does —[/b][/size][/font]
 
@@ -66,7 +70,8 @@ Skyrim VR is not supported.[/font]
 [font=Tahoma][size=4][b]— Compatibility —[/b][/size][/font]
 
 [font=Tahoma][list]
-[*]Works alongside detection and stealth overhauls — it does not change how detection works. Mods that change the stealth meter shift how often enemies become suspicious.
+[*]Works alongside detection and stealth overhauls — a wary enemy gets a small bonus on top of whatever the game and your other mods compute ([font=Courier New]"detection": { "enabled": false }[/font] turns it off). Mods that change the stealth meter shift how often enemies become suspicious.
+[*]Compatible with powerofthree's Papyrus Extender, which hooks the same detection call — both run (tested with 6.5.2).
 [*]AI overhauls that aggressively override NPC behavior may fight the tracker; the plugin re-applies its package once per second.
 [*]Safe with any load order — there is no plugin file.
 [/list][/font]

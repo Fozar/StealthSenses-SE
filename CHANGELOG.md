@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 — 2026-10-10
+
+- **Sharper senses** — an enemy with a reason to be wary spots you a little sooner: its stealth meter on you reads a few points higher while it is on your trail (+15), after a fight with you is over (+10) or after it found a body (+10). In combat nothing changes — the vanilla search after an arrow from hiding is as easy to slip as before. New `detection` section: `enabled`, `tracker_bonus`, `after_fight_bonus`, `found_body_bonus`.
+- **Ledges and floors** — trackers no longer notice or follow footprints far above or below them (on a ledge, a cliff top, the floor above) and no longer stand frozen trying to reach them. Climbing a slope after you still works. New option: `tracker.max_height_diff` (200).
+- **Fix** — a tracker that could not walk to a line of footprints no longer stands in place for a minute; it gives up after about 20 seconds.
+- **Compatibility** — works with powerofthree's Papyrus Extender, which hooks the same detection call (tested with 6.5.2).
+
 ## 0.8.1 — 2026-10-08
 
 - **A fight is only an interruption** — a tracker that runs into a wolf, a bear or a guard on your trail fights it and then goes back to your trail where it left off, instead of forgetting it. A fight with you or your followers still hands it to the vanilla AI, and so does a fight longer than a minute. New option: `fight_pause_seconds`.

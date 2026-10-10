@@ -114,11 +114,11 @@ namespace StealthSenses::Config {
 
     // 0.9: suspicious NPCs see and hear the player better. A bonus is added to the detection level
     // the engine computes for the NPC against the player, in stealth meter points (meter = level +
-    // 100, detected at 100); the largest bonus that applies counts.
+    // 100, detected at 100); the largest bonus that applies counts. None while the NPC is in combat.
     struct DetectionSettings {
         bool enabled           = true;
         int  tracker_bonus     = 15;  // on the player's trail
-        int  after_fight_bonus = 10;  // a hostile that fought the player recently (tracker.after_combat_seconds)
+        int  after_fight_bonus = 10;  // a hostile after a fight with the player is over (tracker.after_combat_seconds)
         int  found_body_bonus  = 10;  // found the body of its own (tracker.body_found_seconds)
 
         bool operator==(const DetectionSettings&) const = default;

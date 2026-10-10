@@ -569,6 +569,12 @@ namespace StealthSenses::Trackers {
             if (!cfg.enabled) {
                 return 0;
             }
+            // In combat detection stays vanilla: the vanilla combat search ("Who's there?") sits at
+            // level 0, on the edge, and +10 turned it into a sure find right after an arrow from
+            // hiding (release smoke test 0.9). after_fight_bonus is for after the fight.
+            if (const auto* actor = RE::TESForm::LookupByID<RE::Actor>(a_id); !actor || actor->IsInCombat()) {
+                return 0;
+            }
             int bonus = 0;
             if (g_trackers.contains(a_id)) {
                 bonus = std::max(bonus, cfg.tracker_bonus);

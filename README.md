@@ -106,13 +106,13 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 
 ### `detection` — suspicious NPCs see you sooner
 
-Bonuses are stealth meter points added to what the game computes for that NPC; the largest one that applies counts.
+Bonuses are stealth meter points added to what the game computes for that NPC; the largest one that applies counts. An NPC in combat gets none: the vanilla search stays as it is.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `true` | Off: detection is vanilla |
 | `tracker_bonus` | `15` | An NPC on your trail |
-| `after_fight_bonus` | `10` | A hostile that fought you recently (`after_combat_seconds`) |
+| `after_fight_bonus` | `10` | A hostile after a fight with you is over (`after_combat_seconds`) |
 | `found_body_bonus` | `10` | An NPC that found the body of one of its own (`body_found_seconds`) |
 
 ### `debug` — logging and bug reports

@@ -13,6 +13,7 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 - **Your trail** — every step you take on foot leaves a footprint. Soft ground holds a clear print, stone barely any; prints fade over game time (faster in rain or snow), water breaks the trail, blood makes it last. The trail is saved with your game.
 - **Trackers** — a hostile humanoid with a reason to be suspicious that sees one of your prints in front of it takes up the trail: draws its weapon, follows print to print, bends down to examine one, searches where the trail runs out, and gives up after a while.
 - **Bodies** — an enemy that finds the body of one of its own you killed goes to it and looks for your trail from there.
+- **Sharper senses** — a suspicious enemy (on your trail, after a fight with you, or having found a body) spots you sooner: its stealth meter on you reads a few points higher.
 - **Vanilla AI stays in charge** — trackers walk with vanilla packages and pathfinding; one that spots you or fights you (or your followers) is handed back to the vanilla AI at once. A fight with someone else — a wolf on the road — only interrupts the chase.
 
 The full description is on the [Nexus page](https://www.nexusmods.com/skyrimspecialedition/mods/194163).
@@ -102,6 +103,17 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 | `stuck_give_up` | `20` | …and given up after this much standing still in total |
 | `repickup_seconds` | `15` | After giving up, an NPC ignores trails for this long |
 
+### `detection` — suspicious NPCs see you sooner
+
+Bonuses are stealth meter points added to what the game computes for that NPC; the largest one that applies counts.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Off: detection is vanilla |
+| `tracker_bonus` | `15` | An NPC on your trail |
+| `after_fight_bonus` | `10` | A hostile that fought you recently (`after_combat_seconds`) |
+| `found_body_bonus` | `10` | An NPC that found the body of one of its own (`body_found_seconds`) |
+
 ### `debug` — logging and bug reports
 
 | Key | Default | Meaning |
@@ -131,7 +143,8 @@ The trace records your position, every nearby NPC's state and every decision the
 ## Compatibility
 
 - No ESP, no edited records, no scripts. Trackers use vanilla packages from `Skyrim.esm` and a temporary marker placed at runtime.
-- Works alongside detection overhauls; it does not change detection itself. Mods that change the stealth meter or GMSTs shift how often NPCs become suspicious (`caution_level`).
+- Works alongside detection overhauls: suspicious NPCs get a bonus on top of whatever the game (and other mods) compute; `detection.enabled: false` turns it off. Mods that change the stealth meter or GMSTs shift how often NPCs become suspicious (`caution_level`).
+- Papyrus Extender hooks the same detection call; both run (tested with Papyrus Extender 6.5.2).
 - AI overhauls that override NPC packages aggressively may fight the tracker's package; the plugin re-applies it once per second.
 
 ## Known limitations

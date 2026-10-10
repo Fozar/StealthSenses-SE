@@ -98,7 +98,8 @@ namespace StealthSenses::Config {
         int         mark_key          = 0x41;       // DirectInput scan code; 0x41 = F7, 0 = off
         STEALTHSENSES_DEV_SETTING(bool, console, true, "echo tracker decisions to the in-game console")
         STEALTHSENSES_DEV_SETTING(bool, log_footstep_tags, true, "log each new footstep tag with its thread")
-        STEALTHSENSES_DEV_SETTING(bool, thread_probe, true, "log which threads run detection and our tasks, catch overlaps")
+        STEALTHSENSES_DEV_SETTING(bool, detection_probe, true, "hook CalculateDetection: calls per thread, outputs on the player in telemetry")
+        STEALTHSENSES_DEV_SETTING(bool, thread_probe, true, "log which threads run our tasks, catch overlaps")
         // Test keys (DirectInput scan codes, 0 = off), on the numpad: vanilla binds F5/F9 (quick
         // save/load) and the input is not consumed. Target: the console-selected NPC, else the one
         // under the crosshair.
@@ -110,9 +111,22 @@ namespace StealthSenses::Config {
         bool operator==(const DebugSettings&) const = default;
     };
 
+    // 0.9: suspicious NPCs see and hear the player better. A bonus is added to the detection level
+    // the engine computes for the NPC against the player, in stealth meter points (meter = level +
+    // 100, detected at 100); the largest bonus that applies counts.
+    struct DetectionSettings {
+        bool enabled           = true;
+        int  tracker_bonus     = 15;  // on the player's trail
+        int  after_fight_bonus = 10;  // a hostile that fought the player recently (tracker.after_combat_seconds)
+        int  found_body_bonus  = 10;  // found the body of its own (tracker.body_found_seconds)
+
+        bool operator==(const DetectionSettings&) const = default;
+    };
+
     struct Settings {
         TrailSettings   trail;
         TrackerSettings tracker;
+        DetectionSettings detection;
         DebugSettings   debug;
 
         bool operator==(const Settings&) const = default;

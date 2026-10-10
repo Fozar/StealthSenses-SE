@@ -17,6 +17,7 @@
 #include "Trackers.h"
 
 #include "Config.h"
+#include "Detection.h"
 #include "Telemetry.h"
 #include "Trail.h"
 
@@ -86,7 +87,7 @@ namespace StealthSenses::Trackers {
             bool                             alertSet   = false; // we put it into alert; undo on a calm drop
             RE::NiPoint3                     lastPos;           // NPC position last tick
             float                            stillTime  = 0.0f; // standing still while it should walk
-            float                            stuckTotal = 0.0f; // all such time since the last footprint
+            float                            stuckTotal = 0.0f; // all such time since it last reached a point
             bool                             humanoid   = false;
             RE::NiPointer<RE::TESObjectREFR> marker;
             RE::FormID                       prevLinked  = 0;
@@ -122,9 +123,8 @@ namespace StealthSenses::Trackers {
         // RequestDetectionLevel returns < 0 while the target is undetected; MaxsuDetectionMeter
         // maps it to a 0..100 meter as level + 100, and any value >= 0 to 100 (detected).
         // repos/max-su-2019_MaxsuDetectionMeter/src/DataHandler.cpp:21-28 [prior art, not RE]
-        int StealthMeter(RE::Actor* a_observer, RE::Actor* a_target) {
-            const auto level = a_observer->RequestDetectionLevel(a_target);
-            return level < 0 ? std::clamp(level + 100, 0, 100) : 100;
+        int StealthMeter(std::int32_t a_level) {
+            return a_level < 0 ? std::clamp(a_level + 100, 0, 100) : 100;
         }
 
         bool IsCandidate(RE::Actor* a_actor, RE::PlayerCharacter* a_player, RE::FormID a_space) {
@@ -448,7 +448,12 @@ namespace StealthSenses::Trackers {
             a_state.lastSeq    = a_fp.seq;
             a_state.trailPos   = a_fp.pos;
             a_state.sinceStep  = 0.0f;
-            a_state.stuckTotal = 0.0f;
+            if (first) {
+                a_state.stuckTotal = 0.0f;
+            }
+            // Otherwise kept: a frozen tracker that picks the next footprint each time it gives up on
+            // one never got dropped (test 0.9 dev: a minute of follow -> stuck -> look -> follow on a
+            // line of footprints it could not walk to). Reaching a point clears it, walking pays it back.
             a_state.hops       = 0;
             a_state.lastPos    = a_actor->GetPosition();
             SetMode(a_actor, a_state, Mode::Follow);
@@ -554,7 +559,53 @@ namespace StealthSenses::Trackers {
         return g_ready;
     }
 
+    namespace {
+        // 0.9: what Detection adds to this NPC's detection level on the player (0 = not suspicious)
+        std::int32_t DetectionBonus(RE::FormID a_id) {
+            const auto& cfg = Config::Get().detection;
+            if (!cfg.enabled) {
+                return 0;
+            }
+            int bonus = 0;
+            if (g_trackers.contains(a_id)) {
+                bonus = std::max(bonus, cfg.tracker_bonus);
+            }
+            if (g_recentCombat.contains(a_id)) {
+                bonus = std::max(bonus, cfg.after_fight_bonus);
+            }
+            if (g_foundBody.contains(a_id)) {
+                bonus = std::max(bonus, cfg.found_body_bonus);
+            }
+            return bonus;
+        }
+
+        void PublishDetectionBonuses() {
+            std::unordered_set<RE::FormID> suspects;
+            for (const auto& [id, state] : g_trackers) {
+                suspects.insert(id);
+            }
+            for (const auto& [id, left] : g_recentCombat) {
+                suspects.insert(id);
+            }
+            for (const auto& [id, left] : g_foundBody) {
+                suspects.insert(id);
+            }
+            std::vector<std::pair<RE::FormID, std::int32_t>> bonuses;
+            for (const auto id : suspects) {
+                if (const auto bonus = DetectionBonus(id); bonus > 0) {
+                    bonuses.emplace_back(id, bonus);
+                }
+            }
+            Detection::PublishBonuses(std::move(bonuses));
+        }
+    }
+
     void Update(float a_deltaSeconds) {
+        // However the tick ends, the detection hook gets the suspects as they are now
+        struct PublishOnExit {
+            ~PublishOnExit() { PublishDetectionBonuses(); }
+        } publishOnExit;
+
         const auto& cfg = Config::Get().tracker;
         auto* player    = RE::PlayerCharacter::GetSingleton();
         auto* processes = RE::ProcessLists::GetSingleton();
@@ -659,7 +710,8 @@ namespace StealthSenses::Trackers {
 
             const bool combat  = a_actor->IsInCombat();
             const bool hostile = a_actor->IsHostileToActor(player);
-            const int  meter   = StealthMeter(a_actor, player);
+            const auto level   = a_actor->RequestDetectionLevel(player);
+            const int  meter   = StealthMeter(level);
             const bool alerted = a_actor->GetActorRuntimeData().currentProcess->lowProcessFlags.all(
                 RE::AIProcess::LowProcessFlags::kAlert);
 
@@ -668,7 +720,7 @@ namespace StealthSenses::Trackers {
                 const auto*    package = a_actor->GetCurrentPackage();
                 const auto*    state   = a_actor->AsActorState();
                 nlohmann::json npc{ { "type", "npc" }, { "id", Telemetry::Hex(id) }, { "name", a_actor->GetName() },
-                    { "pos", Telemetry::Vec(a_actor->GetPosition()) }, { "meter", meter }, { "alert", alerted },
+                    { "pos", Telemetry::Vec(a_actor->GetPosition()) }, { "meter", meter }, { "level", level }, { "bonus", DetectionBonus(id) }, { "alert", alerted },
                     { "combat", combat }, { "hostile", hostile }, { "afterFight", g_recentCombat.contains(id) }, { "foundBody", g_foundBody.contains(id) },
                     { "sitsleep", state ? static_cast<int>(state->GetSitSleepState()) : -1 },
                     { "weapon", state && state->IsWeaponDrawn() },
@@ -676,6 +728,11 @@ namespace StealthSenses::Trackers {
                 // Vanilla "dead bodies this NPC detected" list, to learn what fills it
                 if (const auto* mh = a_actor->GetActorRuntimeData().currentProcess->middleHigh; mh && !mh->deadDetectList.empty()) {
                     npc["deadList"] = mh->deadDetectList.size();
+                }
+                // Dev probe: raw CalculateDetection outputs next to the meter (open_questions #1)
+                if (const auto dv = Detection::LastOnPlayer(id)) {
+                    npc["dv"] = { { "v", dv->value }, { "u4", dv->unk04 }, { "u5", dv->unk05 }, { "u6", dv->unk06 },
+                        { "pos", Telemetry::Vec(dv->pos) }, { "f", { dv->unk08, dv->unk09, dv->unk10 } }, { "age", dv->ageMs } };
                 }
                 if (tracked != g_trackers.end()) {
                     const auto& s = tracked->second;
@@ -866,6 +923,7 @@ namespace StealthSenses::Trackers {
             const float toTarget = pos.GetDistance(state.target);
             if (!state.arrived && toTarget <= cfg.arrive_radius) {
                 state.arrived = true;
+                state.stuckTotal = 0.0f;
                 if (state.mode == Mode::Follow) {
                     Note(std::format("{} arrived at #{} after {:.1f}s", Describe(a_actor), state.lastSeq, state.modeTime));
                 }
@@ -881,6 +939,11 @@ namespace StealthSenses::Trackers {
                 state.stuckTotal += a_deltaSeconds;
             } else {
                 state.stillTime = 0.0f;
+                if (walking && moved >= kStillStep) {
+                    // Walking pays the stuck time back: a long chase with short stalls is not stuck,
+                    // a tracker frozen in a loop of footprints is
+                    state.stuckTotal = std::max(state.stuckTotal - a_deltaSeconds, 0.0f);
+                }
             }
             if (state.stuckTotal >= cfg.stuck_give_up) {
                 Drop(a_actor, state, std::format("got stuck ({:.0f}s without moving)", state.stuckTotal));
@@ -1133,6 +1196,7 @@ namespace StealthSenses::Trackers {
         g_recentCombat.clear();
         g_foundBody.clear();
         g_bodiesSeen.clear();
+        PublishDetectionBonuses();
         Say(std::format("debug: reset — trackers released, memories and body reactions forgotten ({} bodies kept)", g_bodies.size()));
     }
 
@@ -1159,6 +1223,7 @@ namespace StealthSenses::Trackers {
         g_bodiesSeen.clear();
         g_bodies.clear();
         g_sightTested = false;
+        PublishDetectionBonuses();
     }
 
     std::vector<Binding> Bindings() {

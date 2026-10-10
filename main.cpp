@@ -306,12 +306,10 @@ namespace {
 }
 
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {
-    // Trampoline: one 5-byte call patch (Detection) needs 14 bytes; dev build only for now
+    // Trampoline: one 5-byte call patch (Detection) needs 14 bytes
     SKSE::InitInfo init;
-    if constexpr (kDevBuild) {
-        init.trampoline     = true;
-        init.trampolineSize = 14;
-    }
+    init.trampoline     = true;
+    init.trampolineSize = 14;
     SKSE::Init(skse, init);
     // The game's main thread loads plugins and saves; kDataLoaded comes from another one (PE log
     // 2026-10-10, AE 1.7.104), SKSE tasks run on engine workers (open_questions #24)

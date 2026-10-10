@@ -20,6 +20,7 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
     const Config::Settings defaults;
     CHECK(shipped.trail == defaults.trail);
     CHECK(shipped.tracker == defaults.tracker);
+    CHECK(shipped.detection == defaults.detection);
     CHECK(shipped.debug == defaults.debug);
 
     // ...and has every key the parser knows, so players see all of them
@@ -67,6 +68,16 @@ TEST_CASE("config: values that would break the loops are clamped") {
     CHECK(s.trail.thin_spacing >= s.trail.min_spacing);
     CHECK(s.tracker.interval_ms >= s.trail.poll_interval_ms);
     CHECK(s.tracker.max_trackers == 1);
+}
+
+TEST_CASE("config: detection bonuses stay in 0..100 (never make an NPC worse)") {
+    const auto s = Config::Parse(R"({
+        "detection": { "enabled": false, "tracker_bonus": 250, "after_fight_bonus": -20, "found_body_bonus": 30 }
+    })");
+    CHECK_FALSE(s.detection.enabled);
+    CHECK(s.detection.tracker_bonus == 100);
+    CHECK(s.detection.after_fight_bonus == 0);
+    CHECK(s.detection.found_body_bonus == 30);
 }
 
 TEST_CASE("config: malformed JSON throws (Load keeps the defaults then)") {

@@ -53,6 +53,12 @@
         "include_combat": false,
         "max_trackers": 4
     },
+    "detection": {
+        "enabled": true,
+        "tracker_bonus": 15,
+        "after_fight_bonus": 10,
+        "found_body_bonus": 10
+    },
     "debug": {
         "log_level": "info",
         "telemetry": false,

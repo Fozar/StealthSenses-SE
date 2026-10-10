@@ -128,6 +128,13 @@ namespace StealthSenses::Config {
         Read(jk, "debug_all_npcs", k.debug_all_npcs);
 #endif
 
+        auto& e = settings.detection;
+        const auto& je = Section(root, "detection");
+        Read(je, "enabled", e.enabled);
+        Read(je, "tracker_bonus", e.tracker_bonus);
+        Read(je, "after_fight_bonus", e.after_fight_bonus);
+        Read(je, "found_body_bonus", e.found_body_bonus);
+
         auto& d = settings.debug;
         const auto& jd = Section(root, "debug");
         Read(jd, "log_level", d.log_level);
@@ -136,6 +143,7 @@ namespace StealthSenses::Config {
 #ifdef STEALTHSENSES_DEV
         Read(jd, "console", d.console);
         Read(jd, "log_footstep_tags", d.log_footstep_tags);
+        Read(jd, "detection_probe", d.detection_probe);
         Read(jd, "thread_probe", d.thread_probe);
         Read(jd, "key_track", d.key_track);
         Read(jd, "key_body", d.key_body);
@@ -152,6 +160,10 @@ namespace StealthSenses::Config {
         t.thin_spacing     = std::max(t.thin_spacing, t.min_spacing);
         k.interval_ms      = std::clamp(k.interval_ms, t.poll_interval_ms, 10000);
         k.max_trackers     = std::max(k.max_trackers, 1);
+        // A bonus only makes an NPC better at spotting the player, never worse
+        e.tracker_bonus     = std::clamp(e.tracker_bonus, 0, 100);
+        e.after_fight_bonus = std::clamp(e.after_fight_bonus, 0, 100);
+        e.found_body_bonus  = std::clamp(e.found_body_bonus, 0, 100);
 
         return settings;
     }

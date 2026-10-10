@@ -42,6 +42,7 @@
   <label>Сессия <select id="session"></select></label>
   <label><input type="checkbox" id="trails" checked> пути NPC</label>
   <label><input type="checkbox" id="allfp"> все следы</label>
+  <label title="Точка, которую расчёт обнаружения вернул для NPC (dv.pos), если она не у игрока — dev-сборка"><input type="checkbox" id="dvpos"> точки обнаружения</label>
   <span class="muted" id="info">Открой StealthSenses.trace.jsonl (Documents/My Games/Skyrim Special Edition/SKSE)</span>
 </header>
 <div id="timebar">
@@ -189,8 +190,15 @@ function render() {
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
       ctx.beginPath(); ctx.arc(bx, by, 6 * dpr, 0, 7); ctx.stroke();
     }
+    // Dev build 0.9+: the point CalculateDetection returned (open_questions #1, #2), when not on the player
+    if (cur.dv && cur.dv.v !== -1000 && document.getElementById('dvpos').checked && player &&
+        Math.hypot(cur.dv.pos[0] - player.pos[0], cur.dv.pos[1] - player.pos[1]) > 50) {
+      const [px, py] = toScreen(cur.dv.pos), s = 5 * dpr;
+      ctx.strokeStyle = n.color; ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.moveTo(px - s, py - s); ctx.lineTo(px + s, py + s); ctx.moveTo(px + s, py - s); ctx.lineTo(px - s, py + s); ctx.stroke();
+    }
     dot(cur.pos, n.color, cur.track ? 6 : 4, cur.track ? `${n.name}: ${mode} #${cur.track.seq}` : '');
-    rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.weapon ? ' · оружие' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}</div></td><td>${cur.meter}</td><td>${cur.track ? mode + ' #' + cur.track.seq + (cur.track.hops ? ' · точка ' + cur.track.hops : '') : '—'}</td><td class="muted">${cur.pkg}</td></tr>`);
+    rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.weapon ? ' · оружие' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}${cur.afterFight ? ' · после боя' : ''}${cur.foundBody ? ' · нашёл тело' : ''}</div></td><td title="${esc(meterInfo(cur))}">${cur.meter}${cur.bonus ? ' <span class="muted">+' + cur.bonus + '</span>' : ''}</td><td>${cur.track ? mode + ' #' + cur.track.seq + (cur.track.hops ? ' · точка ' + cur.track.hops : '') : '—'}</td><td class="muted">${cur.pkg}</td></tr>`);
   }
   document.querySelector('#npcs tbody').innerHTML = rows.join('') || '<tr><td colspan="5" class="muted">нет</td></tr>';
 
@@ -218,9 +226,19 @@ function dot(p, color, r, label) {
 const fmt = s => { s = Math.max(0, s); return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+// Tooltip of the meter cell: raw detection level and the hook outputs (0.9+ traces)
+function meterInfo(r) {
+  const parts = [];
+  if (r.level !== undefined) parts.push(`level ${r.level}`);
+  if (r.bonus) parts.push(`бонус +${r.bonus}`);
+  if (r.dv) parts.push(`движок ${r.dv.v}, u4 ${r.dv.u4} u5 ${r.dv.u5} u6 ${r.dv.u6}, f [${r.dv.f.map(x => x.toFixed(1)).join(', ')}], ${r.dv.age} мс назад`);
+  return parts.join(' · ');
+}
+
 function seek(t) { T = t; document.getElementById('time').value = t; render(); }
 document.getElementById('time').oninput = e => seek(+e.target.value);
 document.getElementById('trails').onchange = render;
+document.getElementById('dvpos').onchange = render;
 document.getElementById('allfp').onchange = render;
 document.getElementById('play').onclick = () => {
   playing = !playing; document.getElementById('play').textContent = playing ? '❚❚' : '▶';

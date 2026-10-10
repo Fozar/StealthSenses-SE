@@ -16,17 +16,36 @@
 
 #pragma once
 
-// Detection hook: the call to Actor::CalculateDetection inside DoDetectionJob.
-// For now a dev-build probe only (debug.thread_probe): which threads run the detection
-// math and how often — open_questions #3, decides how 0.9 may feed it suspicion data.
+// Detection hook: the call to Actor::CalculateDetection inside DoDetectionJob. Raises the
+// detection level suspicious NPCs get on the player (detection.*, 0.9). Dev build: also counts
+// calls per thread (open_questions #3) and keeps the raw outputs for telemetry (#1).
+// The hook runs on six engine workers at once: it reads only the published bonus list.
 
 namespace StealthSenses::Detection {
-    // At plugin load: patches the call site (dev build with the probe on), else does nothing
+    // At plugin load: patches the call site if detection.enabled (or the dev probe is on)
     void Install();
 
     // kDataLoaded and each game load: logs whether another plugin patched the call after Install
     void Verify();
 
-    // Game thread: every 5 s logs the calls per thread since the previous report
+    // The last CalculateDetection outputs of one observer on the player; meanings unknown (#1)
+    struct PlayerSample {
+        std::int32_t  value = 0;  // detectionValue
+        std::uint8_t  unk04 = 0;
+        std::uint8_t  unk05 = 0;
+        std::uint32_t unk06 = 0;
+        RE::NiPoint3  pos;
+        float         unk08 = 0.0f;
+        float         unk09 = 0.0f;
+        float         unk10 = 0.0f;
+        std::uint32_t ageMs = 0;  // since that call
+    };
+    // Any thread; nullopt without the probe or before the observer's first check of the player
+    std::optional<PlayerSample> LastOnPlayer(RE::FormID a_source);
+
+    // Tracker tick: the bonus each suspicious NPC gets on the player, replacing the previous list
+    void PublishBonuses(std::vector<std::pair<RE::FormID, std::int32_t>> a_bonuses);
+
+    // Dev build: every 5 s logs the calls per thread since the previous report
     void Report();
 }

@@ -87,6 +87,7 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 | `min_visibility` | `0.2` | A footprint at least this visible is *clear*: read from afar and across gaps |
 | `faint_visibility` | `0.1` | A footprint at least this visible is *faint*: read only up close |
 | `close_read_radius` | `300` | "Up close" for faint footprints |
+| `max_height_diff` | `200` | Footprints this much higher or lower than the NPC (a ledge, the floor above) are ignored |
 | `lead_distance` | `900` | How far ahead a tracker reads clear footprints |
 | `gap_distance` | `1200` | How far past the last footprint it looks when the trail breaks |
 | `arrive_radius` | `300` | Distance at which a footprint or search point counts as reached |

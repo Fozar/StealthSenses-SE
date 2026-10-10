@@ -70,6 +70,7 @@ namespace StealthSenses::Config {
         float       min_visibility   = 0.2f;    // clear footprint: read from lead_distance / across gaps
         float       faint_visibility = 0.1f;    // faint footprint (stone 0.15): read only up close
         float       close_read_radius = 300.0f; // "up close" for faint footprints
+        float       max_height_diff   = 200.0f; // footprints this much higher or lower than the NPC are on another level
         int         caution_level    = 70;      // stealth meter 0..100 that counts as "suspicious" (baseline near the player is 41-67)
         float       after_combat_seconds = 60.0f; // a hostile that fought the player stays suspicious this long after
         float       body_found_seconds = 120.0f;  // ...and one that found the body of its own the player killed (0 = off)

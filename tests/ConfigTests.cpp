@@ -59,7 +59,7 @@ TEST_CASE("config: comments are allowed") {
 TEST_CASE("config: values that would break the loops are clamped") {
     const auto s = Config::Parse(R"({
         "trail":   { "min_spacing": 1, "max_footprints": 3, "poll_interval_ms": 1, "halflife_hours": 0, "thin_spacing": 2 },
-        "tracker": { "interval_ms": 10, "max_trackers": 0 }
+        "tracker": { "interval_ms": 10, "max_trackers": 0, "max_height_diff": 0 }
     })");
     CHECK(s.trail.min_spacing == 8.0f);
     CHECK(s.trail.max_footprints == 16);
@@ -68,6 +68,7 @@ TEST_CASE("config: values that would break the loops are clamped") {
     CHECK(s.trail.thin_spacing >= s.trail.min_spacing);
     CHECK(s.tracker.interval_ms >= s.trail.poll_interval_ms);
     CHECK(s.tracker.max_trackers == 1);
+    CHECK(s.tracker.max_height_diff == 32.0f);
 }
 
 TEST_CASE("config: detection bonuses stay in 0..100 (never make an NPC worse)") {

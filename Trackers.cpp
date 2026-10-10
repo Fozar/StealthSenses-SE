@@ -53,8 +53,11 @@ namespace StealthSenses::Trackers {
         RE::TESBoundObject* g_xmarker  = nullptr;
         bool                g_ready    = false;
 
-        // Height difference beyond which a footprint or search point counts as another level
-        constexpr float kMaxDz = 300.0f;
+        // A footprint or search point this much higher or lower than the NPC is on another level (a
+        // ledge, a cliff, the floor above): not noticed, not followed (tracker.max_height_diff)
+        bool OtherLevel(const RE::NiPoint3& a_from, const RE::NiPoint3& a_to) {
+            return std::abs(a_to.z - a_from.z) > Config::Get().tracker.max_height_diff;
+        }
         // Movement below this per tick counts as standing still
         constexpr float kStillStep = 30.0f;
 
@@ -511,7 +514,7 @@ namespace StealthSenses::Trackers {
 
                 const auto onMesh = SnapToNavmesh(a_actor, raw);
                 const auto cand   = onMesh.value_or(raw);
-                if (std::abs(cand.z - a_state.trailPos.z) > kMaxDz) {
+                if (OtherLevel(a_state.trailPos, cand)) {
                     continue;
                 }
                 const float walk = cand.GetDistance(npcPos);
@@ -840,7 +843,8 @@ namespace StealthSenses::Trackers {
                 int                                  nearCount = 0;
                 for (const auto& c : candidates) {
                     const auto* fp = c.fp;
-                    if (fp->seq <= skipSeq || pos.GetDistance(fp->pos) > cfg.notice_radius || !readableFrom(c, pos)) {
+                    if (fp->seq <= skipSeq || pos.GetDistance(fp->pos) > cfg.notice_radius || OtherLevel(pos, fp->pos) ||
+                        !readableFrom(c, pos)) {
                         continue;
                     }
                     ++nearCount;
@@ -963,7 +967,7 @@ namespace StealthSenses::Trackers {
                 // always just out of reach and the tracker stopped at every step (fox, test 0.6.0)
                 const bool readable = readableFrom(c, pos) || state.trailPos.GetDistance(fp->pos) <= cfg.close_read_radius;
                 if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance && readable &&
-                    std::abs(fp->pos.z - pos.z) <= kMaxDz && (!next || fp->seq > next->seq)) {
+                    !OtherLevel(pos, fp->pos) && (!next || fp->seq > next->seq)) {
                     next = fp;
                 }
             }
@@ -977,7 +981,7 @@ namespace StealthSenses::Trackers {
                 for (const auto& c : candidates) {
                     const auto* fp = c.fp;
                     if (c.clear && fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
-                        std::abs(fp->pos.z - state.trailPos.z) <= kMaxDz &&
+                        !OtherLevel(state.trailPos, fp->pos) && !OtherLevel(pos, fp->pos) &&
                         (!next || (freshest ? fp->seq > next->seq : fp->seq < next->seq))) {
                         next = fp;
                         gap  = true;
@@ -1112,17 +1116,18 @@ namespace StealthSenses::Trackers {
         if (!g_ready || !a_actor || !player || a_actor == player || a_actor->IsDead()) {
             return;
         }
-        // The nearest footprint in its space, readable or not: a test of following, not noticing
+        // The nearest footprint in its space and on its level, readable or not: a test of following,
+        // not noticing
         const auto              space = Trail::SpaceOf(a_actor);
         const auto              pos   = a_actor->GetPosition();
         const Trail::Footprint* best  = nullptr;
         for (const auto& fp : Trail::Footprints()) {
-            if (fp.space == space && (!best || pos.GetDistance(fp.pos) < pos.GetDistance(best->pos))) {
+            if (fp.space == space && !OtherLevel(pos, fp.pos) && (!best || pos.GetDistance(fp.pos) < pos.GetDistance(best->pos))) {
                 best = &fp;
             }
         }
         if (!best) {
-            Say(std::format("debug: no footprint in {}'s space", Describe(a_actor)));
+            Say(std::format("debug: no footprint in {}'s space on its level", Describe(a_actor)));
             return;
         }
         auto& state = g_trackers[a_actor->GetFormID()];

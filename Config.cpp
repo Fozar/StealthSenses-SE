@@ -110,6 +110,7 @@ namespace StealthSenses::Config {
         Read(jk, "min_visibility", k.min_visibility);
         Read(jk, "faint_visibility", k.faint_visibility);
         Read(jk, "close_read_radius", k.close_read_radius);
+        Read(jk, "max_height_diff", k.max_height_diff);
         Read(jk, "caution_level", k.caution_level);
         Read(jk, "after_combat_seconds", k.after_combat_seconds);
         Read(jk, "body_found_seconds", k.body_found_seconds);
@@ -160,6 +161,7 @@ namespace StealthSenses::Config {
         t.thin_spacing     = std::max(t.thin_spacing, t.min_spacing);
         k.interval_ms      = std::clamp(k.interval_ms, t.poll_interval_ms, 10000);
         k.max_trackers     = std::max(k.max_trackers, 1);
+        k.max_height_diff  = std::max(k.max_height_diff, 32.0f);  // 0 would rule out any uneven ground
         // A bonus only makes an NPC better at spotting the player, never worse
         e.tracker_bonus     = std::clamp(e.tracker_bonus, 0, 100);
         e.after_fight_bonus = std::clamp(e.after_fight_bonus, 0, 100);

@@ -16,8 +16,10 @@
 
 // RE headers must precede <Windows.h>: its macros (MAX_PATH, …) break CommonLib declarations
 #include "Config.h"
+#include "Detection.h"
 #include "Serialization.h"
 #include "Telemetry.h"
+#include "ThreadProbe.h"
 #include "Trackers.h"
 #include "Trail.h"
 
@@ -32,6 +34,15 @@ namespace {
     std::atomic<DWORD>         g_mainThreadId{ 0 };
     std::atomic<std::uint32_t> g_playerHandle{ 0 };
     std::atomic<bool>          g_tickPending{ false };
+
+    // Every task touches the plugin state; the dev thread probe watches them for overlaps
+    template <class F>
+    void QueueTask(F a_task) {
+        SKSE::GetTaskInterface()->AddTask([a_task = std::move(a_task)]() {
+            ThreadProbe::Section section("task");
+            a_task();
+        });
+    }
 
     void InitializeLogging() {
         auto logPath = SKSE::log::log_directory().value_or(
@@ -69,7 +80,7 @@ namespace {
             // The manager also carries JumpUp/JumpDown and creature breathing tags; only
             // Foot* (FootLeft, FootSprintRight, FootFront, …) are steps
             if (isPlayer && a_event->tag.c_str() && std::string_view(a_event->tag.c_str()).starts_with("Foot")) {
-                SKSE::GetTaskInterface()->AddTask([]() {
+                QueueTask([]() {
                     Trail::NoteFootstepEvent();
                     Trail::TryRecord(RE::PlayerCharacter::GetSingleton(), "footstep");
                 });
@@ -100,7 +111,7 @@ namespace {
             RE::BSTEventSource<RE::TESHitEvent>*) override {
             // Any hit on the player counts as bleeding: the event carries no damage amount
             if (a_event && a_event->target && a_event->target->IsPlayerRef()) {
-                SKSE::GetTaskInterface()->AddTask([]() { Trail::MarkPlayerHit(); });
+                QueueTask([]() { Trail::MarkPlayerHit(); });
             }
             return RE::BSEventNotifyControl::kContinue;
         }
@@ -115,7 +126,7 @@ namespace {
             if (a_event && a_event->dead && a_event->actorDying && a_event->actorKiller) {
                 const auto corpse = a_event->actorDying->GetFormID();
                 const auto killer = a_event->actorKiller->GetFormID();
-                SKSE::GetTaskInterface()->AddTask([corpse, killer]() { Trackers::NoteKill(corpse, killer); });
+                QueueTask([corpse, killer]() { Trackers::NoteKill(corpse, killer); });
             }
             return RE::BSEventNotifyControl::kContinue;
         }
@@ -137,7 +148,7 @@ namespace {
 
     // Runs a test key's action on the game thread with the target NPC (or tells why not)
     void OnDebugKey(void (*a_action)(RE::Actor*), const char* a_name) {
-        SKSE::GetTaskInterface()->AddTask([a_action, a_name]() {
+        QueueTask([a_action, a_name]() {
             auto* actor = DebugTarget();
             if (!actor) {
                 RE::SendHUDMessage::ShowHUDMessage(std::format("StealthSenses: {} — select an NPC in the console or aim at one", a_name).c_str());
@@ -165,7 +176,7 @@ namespace {
                 }
                 const auto key = static_cast<int>(button->GetIDCode());
                 if (key == cfg.mark_key && cfg.mark_key != 0) {
-                    SKSE::GetTaskInterface()->AddTask([]() { Telemetry::Mark(); });
+                    QueueTask([]() { Telemetry::Mark(); });
                 }
                 if constexpr (kDevBuild) {
                     if (key == cfg.key_track && cfg.key_track != 0) {
@@ -174,7 +185,7 @@ namespace {
                         OnDebugKey(Trackers::DebugFindBody, "go to the body");
                     } else if (key == cfg.key_paint && cfg.key_paint != 0) {
                         // In front of the NPC selected in the console, else of the player
-                        SKSE::GetTaskInterface()->AddTask([]() {
+                        QueueTask([]() {
                             const auto selected = RE::Console::GetSelectedRef();
                             auto*      actor    = selected ? selected->As<RE::Actor>() : nullptr;
                             RE::SendHUDMessage::ShowHUDMessage(actor ? "StealthSenses: painted a trail ahead of the selected NPC"
@@ -182,7 +193,7 @@ namespace {
                             Trackers::DebugPaintTrail(actor);
                         });
                     } else if (key == cfg.key_reset && cfg.key_reset != 0) {
-                        SKSE::GetTaskInterface()->AddTask([]() {
+                        QueueTask([]() {
                             RE::SendHUDMessage::ShowHUDMessage("StealthSenses: reset");
                             Trackers::DebugReset();
                         });
@@ -200,6 +211,8 @@ namespace {
         static float             backlog = 0.0f;
 
         g_tickPending = false;
+        Detection::Report();
+        ThreadProbe::Report();
 
         const auto now = Clock::now();
         const float dt = std::min(std::chrono::duration<float>(now - last).count(), 1.0f);
@@ -234,14 +247,14 @@ namespace {
             for (;;) {
                 std::this_thread::sleep_for(interval);
                 if (!g_tickPending.exchange(true)) {
-                    SKSE::GetTaskInterface()->AddTask(Tick);
+                    QueueTask(Tick);
                 }
             }
         }).detach();
     }
 
     void OnDataLoaded() {
-        g_mainThreadId = GetCurrentThreadId();
+        Detection::Verify();
 
         if (auto* footsteps = RE::BGSFootstepManager::GetSingleton()) {
             static FootstepSink sink;
@@ -271,6 +284,8 @@ namespace {
     }
 
     void OnGameLoaded() {
+        ThreadProbe::Section section("game loaded");
+        Detection::Verify();
         if (auto* player = RE::PlayerCharacter::GetSingleton()) {
             g_playerHandle = player->GetHandle().native_handle();
         }
@@ -291,7 +306,17 @@ namespace {
 }
 
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {
-    SKSE::Init(skse);
+    // Trampoline: one 5-byte call patch (Detection) needs 14 bytes; dev build only for now
+    SKSE::InitInfo init;
+    if constexpr (kDevBuild) {
+        init.trampoline     = true;
+        init.trampolineSize = 14;
+    }
+    SKSE::Init(skse, init);
+    // The game's main thread loads plugins and saves; kDataLoaded comes from another one (PE log
+    // 2026-10-10, AE 1.7.104), SKSE tasks run on engine workers (open_questions #24)
+    g_mainThreadId = GetCurrentThreadId();
+    ThreadProbe::SetMainThread();
     InitializeLogging();
     const auto* plugin = SKSE::PluginDeclaration::GetSingleton();
     const auto& ver    = plugin->GetVersion();
@@ -301,6 +326,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     Config::Load();
     ApplyLogLevel();
     Serialization::Register();
+    Detection::Install();
 
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
         using MI = SKSE::MessagingInterface;

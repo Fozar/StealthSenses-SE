@@ -88,6 +88,8 @@ add_commonlibsse_plugin(StealthSenses
         Trackers.cpp
         Serialization.cpp
         Telemetry.cpp
+        Detection.cpp
+        ThreadProbe.cpp
     NAME "StealthSenses"
     VERSION "${PROJECT_VERSION}"
     USE_ADDRESS_LIBRARY

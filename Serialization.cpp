@@ -17,6 +17,7 @@
 #include "Serialization.h"
 
 #include "CoSaveFormat.h"
+#include "ThreadProbe.h"
 #include "Trackers.h"
 #include "Trail.h"
 
@@ -33,6 +34,7 @@ namespace StealthSenses::Serialization {
         // Record layouts are in CoSaveFormat.h (unit-tested); this file opens the records and
         // moves data between them and Trail / Trackers.
         void OnSave(SKSE::SerializationInterface* a_intfc) {
+            ThreadProbe::Section section("co-save write");
             if (a_intfc->OpenRecord(kTrailRecord, kTrailVersion)) {
                 CoSave::WriteTrail(*a_intfc, Trail::Footprints());
                 SKSE::log::info("Serialization: saved {} footprints", Trail::Footprints().size());
@@ -54,6 +56,7 @@ namespace StealthSenses::Serialization {
         }
 
         void OnLoad(SKSE::SerializationInterface* a_intfc) {
+            ThreadProbe::Section section("co-save read");
             Trail::Clear();
             Trackers::Clear();
 
@@ -77,6 +80,7 @@ namespace StealthSenses::Serialization {
         }
 
         void OnRevert(SKSE::SerializationInterface*) {
+            ThreadProbe::Section section("co-save revert");
             Trail::Clear();
             Trackers::Clear();
         }

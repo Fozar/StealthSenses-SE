@@ -98,6 +98,7 @@ namespace StealthSenses::Config {
         int         mark_key          = 0x41;       // DirectInput scan code; 0x41 = F7, 0 = off
         STEALTHSENSES_DEV_SETTING(bool, console, true, "echo tracker decisions to the in-game console")
         STEALTHSENSES_DEV_SETTING(bool, log_footstep_tags, true, "log each new footstep tag with its thread")
+        STEALTHSENSES_DEV_SETTING(bool, thread_probe, true, "log which threads run detection and our tasks, catch overlaps")
         // Test keys (DirectInput scan codes, 0 = off), on the numpad: vanilla binds F5/F9 (quick
         // save/load) and the input is not consumed. Target: the console-selected NPC, else the one
         // under the crosshair.

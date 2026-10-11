@@ -25,7 +25,7 @@ namespace StealthSenses::Serialization {
     namespace {
         constexpr std::uint32_t kUniqueID       = 'SSNS';
         constexpr std::uint32_t kTrailRecord    = 'TRAL';
-        constexpr std::uint32_t kTrailVersion   = 1;
+        using CoSave::kTrailVersion;  // the layouts' file owns it: v1 is still read
         constexpr std::uint32_t kBindingRecord  = 'TRKB';
         constexpr std::uint32_t kBindingVersion = 1;
         constexpr std::uint32_t kBodyRecord     = 'BODY';
@@ -62,8 +62,8 @@ namespace StealthSenses::Serialization {
 
             std::uint32_t type, version, length;
             while (a_intfc->GetNextRecordInfo(type, version, length)) {
-                if (type == kTrailRecord && version == kTrailVersion) {
-                    const auto footprints = CoSave::ReadTrail(*a_intfc);
+                if (type == kTrailRecord && version >= 1 && version <= kTrailVersion) {
+                    const auto footprints = CoSave::ReadTrail(*a_intfc, version);
                     for (const auto& fp : footprints) {
                         Trail::Restore(fp);
                     }

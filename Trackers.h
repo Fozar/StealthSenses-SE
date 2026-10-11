@@ -52,6 +52,16 @@ namespace StealthSenses::Trackers {
     void DebugPaintTrail(RE::Actor* a_origin); // a fresh dirt trail ~30 m ahead of the NPC (null: the player)
     void DebugReset();                       // releases all trackers, forgets memories and reactions
 
+    // Dev overlay: what each tracker is doing now
+    struct DebugView {
+        RE::NiPoint3 pos;       // the NPC
+        RE::NiPoint3 target;    // where its marker is
+        RE::NiPoint3 trailPos;  // the last footprint it reached for
+        bool         searching = false;  // hop/look: points around trailPos
+        std::string  label;     // "Bandit follow #140 3s"
+    };
+    std::vector<DebugView> DebugViews();
+
     // Forgets trackers without touching the engine (revert/load: actors may be gone).
     void Clear();
 

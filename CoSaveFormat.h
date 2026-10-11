@@ -24,7 +24,9 @@
 // calls — WriteRecordData(const T&), ReadRecordData(T&) -> bytes read, ResolveFormID(old, new&).
 // The layouts are what players' saves hold: change one only with a new record version.
 namespace StealthSenses::CoSave {
-    // TRAL v1: count, then 25-byte footprints
+    // TRAL: count, then footprints — v1 25 bytes (0.2–0.9), v2 adds the step multiplier (0.10)
+    inline constexpr std::uint32_t kTrailVersion = 2;
+
     #pragma pack(push, 1)
     struct SavedFootprint {
         float         x, y, z;
@@ -33,8 +35,13 @@ namespace StealthSenses::CoSave {
         std::uint32_t material;
         std::uint8_t  flags;
     };
+    struct SavedFootprintV2 {
+        SavedFootprint v1;
+        float          step;
+    };
     #pragma pack(pop)
     static_assert(sizeof(SavedFootprint) == 25);
+    static_assert(sizeof(SavedFootprintV2) == 29);
 
     // TRKB v1: count, then {actor, marker, prevLinked}
     struct SavedBinding {
@@ -48,16 +55,17 @@ namespace StealthSenses::CoSave {
     void WriteTrail(const I& a_intfc, const std::deque<Trail::Footprint>& a_trail) {
         a_intfc.WriteRecordData(static_cast<std::uint32_t>(a_trail.size()));
         for (const auto& fp : a_trail) {
-            a_intfc.WriteRecordData(SavedFootprint{ fp.pos.x, fp.pos.y, fp.pos.z, fp.space, fp.gameHours,
-                static_cast<std::uint32_t>(fp.material), fp.flags });
+            a_intfc.WriteRecordData(SavedFootprintV2{ { fp.pos.x, fp.pos.y, fp.pos.z, fp.space, fp.gameHours,
+                                                          static_cast<std::uint32_t>(fp.material), fp.flags },
+                fp.step });
         }
     }
 
     // Footprints in saved order; seq is not saved (Trail::Restore numbers them anew). A space
     // that no longer resolves (load order changed) drops the footprint; a truncated record
-    // gives what was read before the cut.
+    // gives what was read before the cut. A v1 footprint has step 1, as it was read then.
     template <class I>
-    std::vector<Trail::Footprint> ReadTrail(const I& a_intfc) {
+    std::vector<Trail::Footprint> ReadTrail(const I& a_intfc, std::uint32_t a_version = kTrailVersion) {
         std::vector<Trail::Footprint> result;
         std::uint32_t                 count = 0;
         if (a_intfc.ReadRecordData(count) != sizeof(count)) {
@@ -65,11 +73,14 @@ namespace StealthSenses::CoSave {
             return result;
         }
         for (std::uint32_t i = 0; i < count; ++i) {
-            SavedFootprint saved{};
-            if (a_intfc.ReadRecordData(saved) != sizeof(saved)) {
+            SavedFootprintV2 read{ {}, 1.0f };
+            const bool       whole = a_version >= 2 ? a_intfc.ReadRecordData(read) == sizeof(read)
+                                                    : a_intfc.ReadRecordData(read.v1) == sizeof(read.v1);
+            if (!whole) {
                 SKSE::log::error("Serialization: truncated footprint {}/{}", i, count);
                 break;
             }
+            const auto& saved = read.v1;
             RE::FormID space = 0;
             if (!a_intfc.ResolveFormID(saved.space, space)) {
                 continue;
@@ -80,6 +91,7 @@ namespace StealthSenses::CoSave {
             fp.gameHours = saved.gameHours;
             fp.material  = static_cast<RE::MATERIAL_ID>(saved.material);
             fp.flags     = saved.flags;
+            fp.step      = std::isfinite(read.step) && read.step >= 0.0f ? read.step : 1.0f;
             result.push_back(fp);
         }
         return result;

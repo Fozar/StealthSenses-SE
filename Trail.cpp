@@ -29,6 +29,108 @@ namespace StealthSenses::Trail {
         using Clock = std::chrono::steady_clock;
         Clock::time_point g_lastFootstepEvent{};
 
+        // [esm] Skyrim.esm / Dawnguard.esm record headers
+        constexpr RE::FormID kLightFootPerk     = 0x05820C;  // LightFoot
+        constexpr RE::FormID kWerewolfRace      = 0x0CDD84;  // WerewolfBeastRace
+        constexpr RE::FormID kVampireLordRace   = 0x00283A;  // DLC1VampireBeastRace, Dawnguard.esm
+
+        // Resolved on kDataLoaded; read on the task threads after that
+        RE::BGSPerk*                                        g_lightFoot = nullptr;
+        const RE::TESRace*                                  g_werewolf  = nullptr;
+        const RE::TESRace*                                  g_vampireLord = nullptr;
+        std::unordered_map<const RE::TESRace*, RaceKind>    g_raceKinds;
+
+        void AddRaces(RE::TESDataHandler* a_data, const std::vector<std::string>& a_refs, RaceKind a_kind, std::string_view a_name) {
+            for (const auto& text : a_refs) {
+                const auto ref  = Config::ParseFormRef(text);
+                const auto* race = ref ? a_data->LookupForm<RE::TESRace>(ref->second, ref->first) : nullptr;
+                if (!race) {
+                    // Not an error: a race mod from the list may not be installed
+                    SKSE::log::info("Trail: {} race '{}' not found", a_name, text);
+                    continue;
+                }
+                g_raceKinds[race] = a_kind;
+            }
+        }
+
+        // Footstep events stop in the air, the poll sampler does not (DEVELOPMENT §6: footprints
+        // in the air after a fall). [CL] bhkCharacterController::context.currentState
+        bool OnGround(RE::PlayerCharacter* a_player) {
+            const auto* controller = a_player->GetCharController();
+            return !controller || controller->context.currentState == RE::hkpCharacterStateType::kOnGround;
+        }
+
+        // Dawnguard's vampire lord behavior graph has "isLevitating" [esm: name in Dawnguard.esm
+        // conditions]; type not checked — int first, then bool
+        bool Levitating(RE::PlayerCharacter* a_player) {
+            std::int32_t asInt = 0;
+            if (a_player->GetGraphVariableInt("isLevitating", asInt)) {
+                return asInt != 0;
+            }
+            bool asBool = false;
+            return a_player->GetGraphVariableBool("isLevitating", asBool) && asBool;
+        }
+
+        bool WearsHeavy(RE::PlayerCharacter* a_player, RE::BGSBipedObjectForm::BipedObjectSlot a_slot) {
+            const auto* armor = a_player->GetWornArmor(a_slot);
+            return armor && armor->IsHeavyArmor();
+        }
+
+        Stride ReadStride(RE::PlayerCharacter* a_player, RE::MATERIAL_ID a_material, bool a_interior) {
+            Stride s;
+            if (const auto* av = a_player->AsActorValueOwner()) {
+                s.sneakSkill = av->GetActorValue(RE::ActorValue::kSneak);
+            }
+            // Sneaking first: sneak-running is still sneaking
+            const auto* state = a_player->AsActorState();
+            if (a_player->IsSneaking()) {
+                s.gait = Gait::kSneak;
+            } else if (state && state->IsSprinting()) {
+                s.gait = Gait::kSprint;
+            } else if (state && state->IsWalking()) {
+                s.gait = Gait::kWalk;
+            }
+            using Slot       = RE::BGSBipedObjectForm::BipedObjectSlot;
+            s.heavyBoots     = WearsHeavy(a_player, Slot::kFeet);
+            s.heavyBody      = WearsHeavy(a_player, Slot::kBody);
+            s.overEncumbered = a_player->IsOverEncumbered();
+            s.lightFoot      = g_lightFoot && a_player->HasPerk(g_lightFoot);
+            const auto* race = a_player->GetRace();
+            s.beastForm      = race && (race == g_werewolf || race == g_vampireLord);
+            if (const auto it = g_raceKinds.find(race); it != g_raceKinds.end()) {
+                s.race = it->second;
+            }
+            s.interior = a_interior;
+            s.material = a_material;
+            return s;
+        }
+
+        constexpr std::string_view GaitName(Gait a_gait) {
+            switch (a_gait) {
+            case Gait::kWalk:
+                return "walk";
+            case Gait::kSprint:
+                return "sprint";
+            case Gait::kSneak:
+                return "sneak";
+            default:
+                return "run";
+            }
+        }
+
+        constexpr std::string_view RaceName(RaceKind a_race) {
+            switch (a_race) {
+            case RaceKind::kKhajiit:
+                return "khajiit";
+            case RaceKind::kArgonian:
+                return "argonian";
+            case RaceKind::kBosmer:
+                return "bosmer";
+            default:
+                return "other";
+            }
+        }
+
         RE::MATERIAL_ID SurfaceUnder(RE::PlayerCharacter* a_player) {
             // [engine_api §6] bhkCharacterController::surfaceMaterial, works indoors too
             auto material = RE::MATERIAL_ID::kNone;
@@ -82,6 +184,13 @@ namespace StealthSenses::Trail {
         if (a_player->IsOnMount()) {
             return;
         }
+        // Jumping, falling, levitating: no ground to leave a print in
+        if (!OnGround(a_player)) {
+            return;
+        }
+        if (g_vampireLord && a_player->GetRace() == g_vampireLord && Levitating(a_player)) {
+            return;
+        }
 
         const auto pos = a_player->GetPosition();
         if (!g_trail.empty()) {
@@ -108,6 +217,9 @@ namespace StealthSenses::Trail {
         fp.gameHours = calendar->GetHoursPassed();
         fp.material  = material;
         fp.seq       = g_nextSeq++;
+        const auto* cell   = a_player->GetParentCell();
+        const auto  stride = ReadStride(a_player, material, cell && cell->IsInteriorCell());
+        fp.step            = StepMult(stride, Config::Get().step);
         if (g_bloodSteps > 0) {
             fp.flags |= kBlood;
             --g_bloodSteps;
@@ -123,11 +235,33 @@ namespace StealthSenses::Trail {
         Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(pos) },
             { "space", Telemetry::Hex(space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(fp.material)) },
             { "base", Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & kBlood) != 0 },
-            { "src", a_source } });
+            { "src", a_source }, { "step", fp.step },
+            { "stride", { { "skill", stride.sneakSkill }, { "gait", GaitName(stride.gait) },
+                            { "boots", stride.heavyBoots }, { "body", stride.heavyBody },
+                            { "over", stride.overEncumbered }, { "lightFoot", stride.lightFoot },
+                            { "race", RaceName(stride.race) }, { "beast", stride.beastForm } } } });
 
-        SKSE::log::trace("Trail: #{} via {} at ({:.0f}, {:.0f}, {:.0f}) space {:08X} material {:08X}{}",
+        SKSE::log::trace("Trail: #{} via {} at ({:.0f}, {:.0f}, {:.0f}) space {:08X} material {:08X} step {:.2f}{}",
             fp.seq, a_source, pos.x, pos.y, pos.z, space,
-            static_cast<std::uint32_t>(fp.material), (fp.flags & kBlood) ? " blood" : "");
+            static_cast<std::uint32_t>(fp.material), fp.step, (fp.flags & kBlood) ? " blood" : "");
+    }
+
+    void Init() {
+        auto* data = RE::TESDataHandler::GetSingleton();
+        if (!data) {
+            return;
+        }
+        g_lightFoot   = data->LookupForm<RE::BGSPerk>(kLightFootPerk, "Skyrim.esm");
+        g_werewolf    = data->LookupForm<RE::TESRace>(kWerewolfRace, "Skyrim.esm");
+        g_vampireLord = data->LookupForm<RE::TESRace>(kVampireLordRace, "Dawnguard.esm");
+        const auto& cfg = Config::Get().step;
+        g_raceKinds.clear();
+        AddRaces(data, cfg.khajiit_races, RaceKind::kKhajiit, "khajiit");
+        AddRaces(data, cfg.argonian_races, RaceKind::kArgonian, "argonian");
+        AddRaces(data, cfg.bosmer_races, RaceKind::kBosmer, "bosmer");
+        SKSE::log::info("Trail: Light Foot {}, werewolf {}, vampire lord {}, {} races with a step of their own",
+            g_lightFoot ? "found" : "missing", g_werewolf ? "found" : "missing",
+            g_vampireLord ? "found" : "missing", g_raceKinds.size());
     }
 
     void MarkPlayerHit() {
@@ -180,6 +314,66 @@ namespace StealthSenses::Trail {
         Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(a_pos) },
             { "space", Telemetry::Hex(a_space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(a_material)) },
             { "base", Visibility(fp, fp.gameHours, false) }, { "blood", false }, { "src", a_source } });
+    }
+
+    std::string DescribeStep(RE::PlayerCharacter* a_player) {
+        if (!a_player) {
+            return {};
+        }
+        const auto  material = SurfaceUnder(a_player);
+        const auto* cell     = a_player->GetParentCell();
+        const auto  s        = ReadStride(a_player, material, cell && cell->IsInteriorCell());
+        auto text = std::format("{} x{:.2f}  skill {:.0f} {}", MaterialName(material), StepMult(s, Config::Get().step),
+            s.sneakSkill, GaitName(s.gait));
+        for (const auto& [on, name] : { std::pair{ s.heavyBoots, "boots" }, { s.heavyBody, "body" },
+                 { s.overEncumbered, "over" }, { s.lightFoot, "lightFoot" }, { s.beastForm, "beast" } }) {
+            if (on) {
+                text += ' ';
+                text += name;
+            }
+        }
+        if (s.race != RaceKind::kOther) {
+            text += ' ';
+            text += RaceName(s.race);
+        }
+        if (!OnGround(a_player)) {
+            text += "  AIR";
+        } else if (g_vampireLord && a_player->GetRace() == g_vampireLord && Levitating(a_player)) {
+            text += "  LEVITATING";
+        }
+        return text;
+    }
+
+    std::string_view MaterialName(RE::MATERIAL_ID a_material) {
+        using M = RE::MATERIAL_ID;
+        switch (a_material) {
+        case M::kNone:               return "none";
+        case M::kStone:              return "stone";
+        case M::kStoneBroken:        return "stoneBroken";
+        case M::kStoneHeavy:         return "stoneHeavy";
+        case M::kStoneStairs:        return "stoneStairs";
+        case M::kStoneStairsBroken:  return "stoneStairsBroken";
+        case M::kStoneAsStairs:      return "stoneAsStairs";
+        case M::kSnow:               return "snow";
+        case M::kSnowStairs:         return "snowStairs";
+        case M::kIce:                return "ice";
+        case M::kMud:                return "mud";
+        case M::kDirt:               return "dirt";
+        case M::kGrass:              return "grass";
+        case M::kSand:               return "sand";
+        case M::kAsh:                return "ash";
+        case M::kGravel:             return "gravel";
+        case M::kWood:               return "wood";
+        case M::kWoodStairs:         return "woodStairs";
+        case M::kWoodAsStairs:       return "woodAsStairs";
+        case M::kWoodHeavy:          return "woodHeavy";
+        case M::kCarpet:             return "carpet";
+        case M::kWater:              return "water";
+        case M::kWaterPuddle:        return "puddle";
+        case M::kMetalSolid:         return "metal";
+        case M::kGlass:              return "glass";
+        default:                     return "other";
+        }
     }
 
     bool FootstepEventsActive() {

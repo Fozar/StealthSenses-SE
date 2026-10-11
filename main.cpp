@@ -17,6 +17,7 @@
 // RE headers must precede <Windows.h>: its macros (MAX_PATH, …) break CommonLib declarations
 #include "Config.h"
 #include "Detection.h"
+#include "Overlay.h"
 #include "Serialization.h"
 #include "Telemetry.h"
 #include "ThreadProbe.h"
@@ -176,7 +177,7 @@ namespace {
                 }
                 const auto key = static_cast<int>(button->GetIDCode());
                 if (key == cfg.mark_key && cfg.mark_key != 0) {
-                    QueueTask([]() { Telemetry::Mark(); });
+                    QueueTask([]() { Overlay::NoteMark(Telemetry::Mark()); });
                 }
                 if constexpr (kDevBuild) {
                     if (key == cfg.key_track && cfg.key_track != 0) {
@@ -192,6 +193,8 @@ namespace {
                                                                      : "StealthSenses: painted a trail ahead");
                             Trackers::DebugPaintTrail(actor);
                         });
+                    } else if (key == cfg.key_overlay && cfg.key_overlay != 0) {
+                        QueueTask([]() { Overlay::Toggle(); });
                     } else if (key == cfg.key_reset && cfg.key_reset != 0) {
                         QueueTask([]() {
                             RE::SendHUDMessage::ShowHUDMessage("StealthSenses: reset");
@@ -232,6 +235,7 @@ namespace {
         if (backlog * 1000.0f >= static_cast<float>(Config::Get().tracker.interval_ms)) {
             const auto start = std::chrono::steady_clock::now();
             Trackers::Update(backlog);
+            Overlay::Publish();
             backlog = 0.0f;
             if (Telemetry::Enabled()) {
                 // Main-thread cost of a tracker tick: trail scan, NPCs, sight rays
@@ -255,6 +259,8 @@ namespace {
 
     void OnDataLoaded() {
         Detection::Verify();
+        Trail::Init();
+        Overlay::Install();
 
         if (auto* footsteps = RE::BGSFootstepManager::GetSingleton()) {
             static FootstepSink sink;
@@ -300,7 +306,7 @@ namespace {
             Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(fp.pos) },
                 { "space", Telemetry::Hex(fp.space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(fp.material)) },
                 { "base", Trail::Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & Trail::kBlood) != 0 },
-                { "src", "save" } });
+                { "src", "save" }, { "step", fp.step } });
         }
     }
 }

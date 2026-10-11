@@ -14,6 +14,26 @@
         "blood_steps": 20,
         "blood_visibility_bonus": 1.0
     },
+    "step": {
+        "enabled": true,
+        "skill_floor": 0.6,
+        "sneak_mult": 0.7,
+        "walk_mult": 0.9,
+        "sprint_mult": 1.25,
+        "heavy_boots_mult": 1.15,
+        "heavy_armor_mult": 1.1,
+        "overencumbered_mult": 1.25,
+        "light_foot_mult": 0.8,
+        "khajiit_mult": 0.85,
+        "bosmer_mult": 0.8,
+        "argonian_mult": 0.8,
+        "beast_form_mult": 1.5,
+        "min_mult": 0.25,
+        "max_mult": 2.0,
+        "khajiit_races": [ "Skyrim.esm|013745", "Skyrim.esm|088845" ],
+        "argonian_races": [ "Skyrim.esm|013740", "Skyrim.esm|08883A" ],
+        "bosmer_races": [ "Skyrim.esm|013749", "Skyrim.esm|088884" ]
+    },
     "tracker": {
         "enabled": true,
         "interval_ms": 1000,

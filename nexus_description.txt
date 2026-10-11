@@ -5,14 +5,16 @@
 
 No .esp. No scripts. No edited records. Vanilla AI does the walking — the plugin only tells it where to look next, and lets a wary enemy see a little sharper.[/font]
 
-[font=Tahoma][b]Early access (0.9).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
+[font=Tahoma][b]Early access (0.10).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
 
 [font=Tahoma][size=4][b]— Your trail —[/b][/size][/font]
 
 [font=Tahoma][list]
 [*][b]Surface matters[/b] — snow, mud, dirt, sand and grass hold a clear print; gravel less so; stone, wood and ice barely at all.
+[*][b]How you walk matters[/b] — a master of Sneak creeping along leaves faint prints; sprinting in heavy armor, overloaded, leaves deep ones. The Light Foot perk helps. Khajiit step lightly everywhere, Bosmer on grass and dirt, Argonians in mud; a werewolf or a vampire lord on foot is hard to miss, a levitating one leaves nothing.
 [*][b]Prints fade[/b] — a clear print stays readable for several game hours, much less in rain or snow.
 [*][b]Water breaks the trail[/b] — wade through a stream and the trail ends there.
+[*][b]No prints in the air[/b] — jumping or falling leaves nothing until you land.
 [*][b]Blood[/b] — get hurt and your next steps leave a trail that lasts much longer.
 [*][b]Saved with your game[/b] — come back later and your old trail is still there (until it fades).
 [/list][/font]
@@ -65,7 +67,7 @@ Skyrim VR is not supported.[/font]
 
 [font=Tahoma][size=4][b]— Configuration —[/b][/size][/font]
 
-[font=Tahoma]Everything is tunable in [font=Courier New]Data\SKSE\Plugins\StealthSensesConfig.json[/font]: how fast prints fade, how visible each surface is, how close and how wide an NPC looks, how suspicious it must be, how long it searches, whether trackers draw weapons. Every key is optional; the full list with explanations is in the [url=https://github.com/Fozar/StealthSenses-SE#configuration]README on GitHub[/url].[/font]
+[font=Tahoma]Everything is tunable in [font=Courier New]Data\SKSE\Plugins\StealthSensesConfig.json[/font]: how fast prints fade, how visible each surface is, how much your skill, gait, armor and race change your step, how close and how wide an NPC looks, how suspicious it must be, how long it searches, whether trackers draw weapons. Every key is optional; the full list with explanations is in the [url=https://github.com/Fozar/StealthSenses-SE#configuration]README on GitHub[/url].[/font]
 
 [font=Tahoma][size=4][b]— Compatibility —[/b][/size][/font]
 

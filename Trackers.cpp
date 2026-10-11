@@ -1237,6 +1237,28 @@ namespace StealthSenses::Trackers {
         PublishDetectionBonuses();
     }
 
+    std::vector<DebugView> DebugViews() {
+        std::vector<DebugView> result;
+        for (const auto& [id, state] : g_trackers) {
+            auto* actor = RE::TESForm::LookupByID<RE::Actor>(id);
+            if (!actor || !actor->Is3DLoaded()) {
+                continue;
+            }
+            const char* name   = actor->GetName();
+            const bool  search = state.mode == Mode::Hop || state.mode == Mode::Look;
+            auto        label  = std::format("{} {} #{} {:.0f}s", name && *name ? name : "?", ModeName(state.mode),
+                        state.lastSeq, state.modeTime);
+            if (search) {
+                label += std::format(" hop {}", state.hops);
+            }
+            if (state.fight > 0.0f) {
+                label += " fighting";
+            }
+            result.push_back({ actor->GetPosition(), state.target, state.trailPos, search, std::move(label) });
+        }
+        return result;
+    }
+
     std::vector<Binding> Bindings() {
         std::vector<Binding> result;
         for (const auto& [id, state] : g_trackers) {

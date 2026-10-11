@@ -39,8 +39,71 @@ namespace StealthSenses::Trail {
         }
     }
 
+    float StepMult(const Stride& a_stride, const Config::StepSettings& a_cfg) {
+        if (!a_cfg.enabled) {
+            return 1.0f;
+        }
+        // Sneak skill holds the racial bonuses (Khajiit +10; Argonian, Bosmer, Dunmer +5 [esm]);
+        // the racial factors below are on top, so a race still shows at skill 100
+        const float skill = std::clamp(a_stride.sneakSkill / 100.0f, 0.0f, 1.0f);
+        float       mult  = 1.0f - (1.0f - a_cfg.skill_floor) * skill;
+
+        switch (a_stride.gait) {
+        case Gait::kSneak:
+            mult *= a_cfg.sneak_mult;
+            break;
+        case Gait::kWalk:
+            mult *= a_cfg.walk_mult;
+            break;
+        case Gait::kSprint:
+            mult *= a_cfg.sprint_mult;
+            break;
+        case Gait::kRun:
+            break;
+        }
+        if (a_stride.heavyBoots) {
+            mult *= a_cfg.heavy_boots_mult;
+        }
+        if (a_stride.heavyBody) {
+            mult *= a_cfg.heavy_armor_mult;
+        }
+        if (a_stride.overEncumbered) {
+            mult *= a_cfg.overencumbered_mult;
+        }
+        if (a_stride.lightFoot) {
+            mult *= a_cfg.light_foot_mult;
+        }
+
+        using M = RE::MATERIAL_ID;
+        const auto mat = a_stride.material;
+        switch (a_stride.race) {
+        case RaceKind::kKhajiit:
+            mult *= a_cfg.khajiit_mult;  // race description: "natural stealthiness" [esm]
+            break;
+        case RaceKind::kBosmer:
+            // "chameleon-like ability to hide in forested areas" [UESP]; a forest itself cannot
+            // be told, the ground underfoot can
+            if (!a_stride.interior && (mat == M::kGrass || mat == M::kDirt)) {
+                mult *= a_cfg.bosmer_mult;
+            }
+            break;
+        case RaceKind::kArgonian:
+            if (!a_stride.interior && mat == M::kMud) {
+                mult *= a_cfg.argonian_mult;  // marsh people [assumption: lore not checked yet]
+            }
+            break;
+        case RaceKind::kOther:
+            break;
+        }
+        if (a_stride.beastForm) {
+            mult *= a_cfg.beast_form_mult;
+        }
+        return std::clamp(mult, a_cfg.min_mult, a_cfg.max_mult);
+    }
+
     float Visibility(const Footprint& a_fp, float a_nowHours, bool a_badWeather, const Config::TrailSettings& a_cfg) {
-        float base = BaseVisibility(a_fp.material, a_cfg);
+        // Blood is not deeper for a heavier step: the bonus is added after the step multiplier
+        float base = BaseVisibility(a_fp.material, a_cfg) * a_fp.step;
         if (a_fp.flags & kBlood) {
             base += a_cfg.blood_visibility_bonus;
         }

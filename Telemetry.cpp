@@ -95,7 +95,7 @@ namespace StealthSenses::Telemetry {
         Write({ { "type", "log" }, { "text", a_text } });
     }
 
-    void Mark() {
+    int Mark() {
         ++g_marks;
         auto* player = RE::PlayerCharacter::GetSingleton();
         nlohmann::json record{ { "type", "mark" }, { "n", g_marks } };
@@ -113,6 +113,7 @@ namespace StealthSenses::Telemetry {
             }
         }
         RE::SendHUDMessage::ShowHUDMessage(std::format("StealthSenses: {}", text).c_str());
+        return g_marks;
     }
 
     nlohmann::json Vec(const RE::NiPoint3& a_pos) {

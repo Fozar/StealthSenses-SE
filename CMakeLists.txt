@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(StealthSenses VERSION 0.9.0 LANGUAGES CXX)
+project(StealthSenses VERSION 0.10.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -106,6 +106,26 @@ option(STEALTHSENSES_DEV "Build with test-only switches" OFF)
 if(STEALTHSENSES_DEV)
     target_compile_definitions(StealthSenses PRIVATE STEALTHSENSES_DEV)
     set(_pkg_suffix "-dev")
+
+    # Dev overlay (Overlay.cpp): Dear ImGui with its D3D11 backend, no platform backend
+    FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG v1.91.9b
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(imgui)
+    add_library(imgui STATIC
+        "${imgui_SOURCE_DIR}/imgui.cpp"
+        "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+        "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+        "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp")
+    target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
+    target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
+    target_link_libraries(imgui PUBLIC d3d11 d3dcompiler)
+    target_sources(StealthSenses PRIVATE Overlay.cpp)
+    target_link_libraries(StealthSenses PRIVATE imgui)
 else()
     set(_pkg_suffix "")
 endif()

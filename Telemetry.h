@@ -32,8 +32,8 @@ namespace StealthSenses::Telemetry {
     // Human-readable tracker event, mirrored from the log
     void Log(std::string_view a_text);
 
-    // Player pressed the mark key: numbered mark with the player's state
-    void Mark();
+    // Player pressed the mark key: numbered mark with the player's state; returns its number
+    int Mark();
 
     nlohmann::json Vec(const RE::NiPoint3& a_pos);
     std::string    Hex(std::uint32_t a_value);

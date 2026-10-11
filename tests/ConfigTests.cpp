@@ -19,6 +19,7 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
     const auto        shipped = Config::Parse(text);
     const Config::Settings defaults;
     CHECK(shipped.trail == defaults.trail);
+    CHECK(shipped.step == defaults.step);
     CHECK(shipped.tracker == defaults.tracker);
     CHECK(shipped.detection == defaults.detection);
     CHECK(shipped.debug == defaults.debug);
@@ -27,6 +28,12 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
     const auto root = nlohmann::json::parse(text, nullptr, true, true);
     for (const char* key : { "min_spacing", "max_footprints", "thin_spacing", "halflife_hours" }) {
         CHECK_MESSAGE(root["trail"].contains(key), key);
+    }
+    for (const char* key : { "enabled", "skill_floor", "sneak_mult", "walk_mult", "sprint_mult", "heavy_boots_mult",
+             "heavy_armor_mult", "overencumbered_mult", "light_foot_mult", "khajiit_mult", "bosmer_mult",
+             "argonian_mult", "beast_form_mult", "min_mult", "max_mult", "khajiit_races", "argonian_races",
+             "bosmer_races" }) {
+        CHECK_MESSAGE(root["step"].contains(key), key);
     }
     for (const char* key : { "notice_line_of_sight", "body_found_seconds", "body_notice_radius", "body_know_radius",
              "body_max_age_hours", "give_up_seconds", "leash_distance", "tired_cooldown",
@@ -83,4 +90,29 @@ TEST_CASE("config: detection bonuses stay in 0..100 (never make an NPC worse)") 
 
 TEST_CASE("config: malformed JSON throws (Load keeps the defaults then)") {
     CHECK_THROWS_AS(Config::Parse("{ \"trail\": "), nlohmann::json::exception);
+}
+
+TEST_CASE("config: step multipliers never go negative, bounds stay ordered") {
+    const auto s = Config::Parse(R"({
+        "step": { "sneak_mult": -1, "skill_floor": 3, "min_mult": 0.5, "max_mult": 0.2,
+                  "khajiit_races": [ "MyRaces.esp|000801" ] }
+    })");
+    CHECK(s.step.sneak_mult == 0.0f);
+    CHECK(s.step.skill_floor == 1.0f);
+    CHECK(s.step.max_mult >= s.step.min_mult);
+    REQUIRE(s.step.khajiit_races.size() == 1);
+    CHECK(s.step.khajiit_races[0] == "MyRaces.esp|000801");
+}
+
+TEST_CASE("config: form references \"Plugin|FormID\"") {
+    const auto r = Config::ParseFormRef("Skyrim.esm|013745");
+    REQUIRE(r);
+    CHECK(r->first == "Skyrim.esm");
+    CHECK(r->second == 0x013745);
+    CHECK(Config::ParseFormRef("Dawnguard.esm|0x00283A")->second == 0x00283A);
+    CHECK_FALSE(Config::ParseFormRef("Skyrim.esm"));
+    CHECK_FALSE(Config::ParseFormRef("|013745"));
+    CHECK_FALSE(Config::ParseFormRef("Skyrim.esm|"));
+    CHECK_FALSE(Config::ParseFormRef("Skyrim.esm|xyz"));
+    CHECK_FALSE(Config::ParseFormRef("Skyrim.esm|01013745"));  // with a load order byte
 }

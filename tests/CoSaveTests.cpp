@@ -54,10 +54,11 @@ namespace {
 }
 
 TEST_CASE("trail record: round trip keeps every saved field") {
-    const std::deque<Trail::Footprint> trail{
+    std::deque<Trail::Footprint> trail{
         Footprint(10.5f, 0x0000003C, 12.25f, RE::MATERIAL_ID::kSnow, Trail::kNone),
         Footprint(-300.0f, 0x000133C6, 13.5f, RE::MATERIAL_ID::kStone, Trail::kBlood),
     };
+    trail[1].step = 0.42f;
     FakeCoSave co;
     CoSave::WriteTrail(co, trail);
     const auto read = CoSave::ReadTrail(co);
@@ -69,28 +70,58 @@ TEST_CASE("trail record: round trip keeps every saved field") {
         CHECK(read[i].gameHours == trail[i].gameHours);
         CHECK(read[i].material == trail[i].material);
         CHECK(read[i].flags == trail[i].flags);
+        CHECK(read[i].step == trail[i].step);
     }
 }
 
 TEST_CASE("trail record: the on-disk layout does not change") {
-    // Players' saves hold this layout: count u32, then 25-byte {x y z f32, space u32, hours f32,
-    // material u32, flags u8}. A change here needs a new record version.
+    // Players' saves hold this layout: count u32, then 29-byte v2 {x y z f32, space u32, hours f32,
+    // material u32, flags u8, step f32}. A change here needs a new record version.
+    CHECK(CoSave::kTrailVersion == 2);
     FakeCoSave co;
-    CoSave::WriteTrail(co, { Footprint(1.0f, 0x3C, 2.0f, RE::MATERIAL_ID::kDirt, Trail::kBlood) });
-    REQUIRE(co.bytes.size() == 4 + 25);
+    auto       fp = Footprint(1.0f, 0x3C, 2.0f, RE::MATERIAL_ID::kDirt, Trail::kBlood);
+    fp.step       = 0.75f;
+    CoSave::WriteTrail(co, { fp });
+    REQUIRE(co.bytes.size() == 4 + 29);
     std::uint32_t count, space, material;
-    float         x, hours;
+    float         x, hours, step;
     std::memcpy(&count, co.bytes.data(), 4);
     std::memcpy(&x, co.bytes.data() + 4, 4);
     std::memcpy(&space, co.bytes.data() + 16, 4);
     std::memcpy(&hours, co.bytes.data() + 20, 4);
     std::memcpy(&material, co.bytes.data() + 24, 4);
+    std::memcpy(&step, co.bytes.data() + 29, 4);
     CHECK(count == 1);
     CHECK(x == 1.0f);
     CHECK(space == 0x3C);
     CHECK(hours == 2.0f);
     CHECK(material == static_cast<std::uint32_t>(RE::MATERIAL_ID::kDirt));
     CHECK(co.bytes[28] == Trail::kBlood);
+    CHECK(step == 0.75f);
+}
+
+TEST_CASE("trail record: v1 from saves before 0.10 reads with step 1") {
+    // v1: count u32, then 25-byte {x y z f32, space u32, hours f32, material u32, flags u8}
+    FakeCoSave co;
+    co.WriteRecordData(std::uint32_t{ 2 });
+    co.WriteRecordData(CoSave::SavedFootprint{ 1.0f, 2.0f, 3.0f, 0x3C, 4.0f, static_cast<std::uint32_t>(RE::MATERIAL_ID::kSnow), Trail::kBlood });
+    co.WriteRecordData(CoSave::SavedFootprint{ 5.0f, 6.0f, 7.0f, 0x3C, 8.0f, static_cast<std::uint32_t>(RE::MATERIAL_ID::kDirt), 0 });
+    const auto read = CoSave::ReadTrail(co, 1);
+    REQUIRE(read.size() == 2);
+    CHECK(read[0].pos == RE::NiPoint3{ 1.0f, 2.0f, 3.0f });
+    CHECK(read[0].flags == Trail::kBlood);
+    CHECK(read[0].step == 1.0f);
+    CHECK(read[1].gameHours == 8.0f);
+    CHECK(read[1].step == 1.0f);
+}
+
+TEST_CASE("trail record: a broken step reads as 1") {
+    FakeCoSave co;
+    co.WriteRecordData(std::uint32_t{ 1 });
+    co.WriteRecordData(CoSave::SavedFootprintV2{ { 1.0f, 2.0f, 3.0f, 0x3C, 4.0f, 0, 0 }, std::numeric_limits<float>::quiet_NaN() });
+    const auto read = CoSave::ReadTrail(co);
+    REQUIRE(read.size() == 1);
+    CHECK(read[0].step == 1.0f);
 }
 
 TEST_CASE("trail record: load order change remaps spaces and drops gone ones") {

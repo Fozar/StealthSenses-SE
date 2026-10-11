@@ -137,3 +137,95 @@ TEST_CASE("thin: an already sparse trail over the limit loses its oldest") {
     CHECK(trail.front().seq == 6);
     CHECK(trail.back().seq == 25);
 }
+
+TEST_CASE("step: the default stride changes nothing; visibility scales with the step") {
+    const Config::StepSettings step;
+    CHECK(Trail::StepMult({}, step) == doctest::Approx(1.0f));
+
+    const Config::TrailSettings cfg;
+    auto fp = Make(1, 0);
+    fp.step = 0.5f;
+    CHECK(Trail::Visibility(fp, 0, false, cfg) == doctest::Approx(cfg.soft_visibility * 0.5f));
+    // Blood is added after the step: a light step leaves the same blood
+    auto bloody = Make(1, 0, 0, RE::MATERIAL_ID::kStoneBroken, 0x3C, Trail::kBlood);
+    bloody.step = 0.5f;
+    CHECK(Trail::Visibility(bloody, 0, false, cfg) == doctest::Approx(cfg.hard_visibility * 0.5f + cfg.blood_visibility_bonus));
+}
+
+TEST_CASE("step: Sneak skill lowers it linearly down to skill_floor") {
+    const Config::StepSettings cfg;
+    Trail::Stride s;
+    s.sneakSkill = 50;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(1.0f - (1.0f - cfg.skill_floor) / 2));
+    s.sneakSkill = 100;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(cfg.skill_floor));
+    s.sneakSkill = 250;  // Fortify Sneak past 100
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(cfg.skill_floor));
+}
+
+TEST_CASE("step: gait, armor, load and Light Foot multiply") {
+    const Config::StepSettings cfg;
+    Trail::Stride s;
+    s.gait = Trail::Gait::kSneak;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(cfg.sneak_mult));
+    s.gait = Trail::Gait::kWalk;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(cfg.walk_mult));
+
+    s.gait           = Trail::Gait::kSprint;
+    s.heavyBoots     = true;
+    s.heavyBody      = true;
+    s.overEncumbered = true;
+    CHECK(Trail::StepMult(s, cfg) ==
+          doctest::Approx(std::min(cfg.sprint_mult * cfg.heavy_boots_mult * cfg.heavy_armor_mult * cfg.overencumbered_mult, cfg.max_mult)));
+
+    Trail::Stride light;
+    light.lightFoot = true;
+    CHECK(Trail::StepMult(light, cfg) == doctest::Approx(cfg.light_foot_mult));
+}
+
+TEST_CASE("step: races by ground underfoot") {
+    const Config::StepSettings cfg;
+    Trail::Stride s;
+    s.race     = Trail::RaceKind::kKhajiit;
+    s.material = RE::MATERIAL_ID::kStone;
+    s.interior = true;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(cfg.khajiit_mult));  // everywhere
+
+    s.race     = Trail::RaceKind::kBosmer;
+    s.interior = false;
+    s.material = RE::MATERIAL_ID::kGrass;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(cfg.bosmer_mult));
+    s.material = RE::MATERIAL_ID::kSnow;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(1.0f));
+    s.material = RE::MATERIAL_ID::kDirt;
+    s.interior = true;  // a cave floor is not the wood
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(1.0f));
+
+    s.race     = Trail::RaceKind::kArgonian;
+    s.interior = false;
+    s.material = RE::MATERIAL_ID::kMud;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(cfg.argonian_mult));
+    s.material = RE::MATERIAL_ID::kGrass;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("step: kept within min_mult..max_mult; off = 1") {
+    Config::StepSettings cfg;
+    Trail::Stride s;
+    s.sneakSkill = 100;
+    s.gait       = Trail::Gait::kSneak;
+    s.lightFoot  = true;
+    s.race       = Trail::RaceKind::kKhajiit;  // 0.6 * 0.7 * 0.8 * 0.85 = 0.29
+    cfg.min_mult = 0.4f;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(0.4f));
+
+    Trail::Stride beast;
+    beast.beastForm  = true;
+    beast.gait       = Trail::Gait::kSprint;
+    beast.heavyBoots = true;
+    cfg.max_mult     = 1.6f;
+    CHECK(Trail::StepMult(beast, cfg) == doctest::Approx(1.6f));
+
+    cfg.enabled = false;
+    CHECK(Trail::StepMult(s, cfg) == doctest::Approx(1.0f));
+}

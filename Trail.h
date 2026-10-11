@@ -30,7 +30,8 @@ namespace StealthSenses::Trail {
         float            gameHours = 0.0f; // Calendar::GetHoursPassed() at the time of the step
         RE::MATERIAL_ID  material = RE::MATERIAL_ID::kNone;
         std::uint8_t     flags    = kNone;
-        std::uint32_t    seq      = 0;     // monotonically increasing along the trail
+        float            step     = 1.0f;  // how the player stepped (TrailLogic StepMult), 1 = as before 0.10
+        std::uint32_t    seq     = 0;     // monotonically increasing along the trail
     };
 
     // Space id of a reference: interior cell or worldspace FormID; 0 if not in the world.
@@ -39,6 +40,9 @@ namespace StealthSenses::Trail {
     // Records a footprint at the player's position if far enough from the previous one.
     // a_source is only for logging ("footstep" / "poll").
     void TryRecord(RE::PlayerCharacter* a_player, std::string_view a_source);
+
+    // On kDataLoaded: forms the step reads (Light Foot, beast form races, races from the config)
+    void Init();
 
     // Called from TESHitEvent: the next N footprints carry blood.
     void MarkPlayerHit();
@@ -62,6 +66,11 @@ namespace StealthSenses::Trail {
     // Dev test tool: appends a footprint as if the player had just stepped there (fresh seq and
     // game time, thinned like a real one). a_source is for logging ("painted").
     void Inject(const RE::NiPoint3& a_pos, RE::FormID a_space, RE::MATERIAL_ID a_material, std::string_view a_source);
+
+    // Dev overlay: the player's step right now ("Stone x0.42  skill 100 sneak boots") and short
+    // material names
+    std::string      DescribeStep(RE::PlayerCharacter* a_player);
+    std::string_view MaterialName(RE::MATERIAL_ID a_material);
 
     // True if a player footstep event arrived within the last second; the poll sampler
     // only records while footstep events are silent.

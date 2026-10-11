@@ -64,6 +64,23 @@ namespace StealthSenses::Config {
         SKSE::log::info("Config: loaded {}", path.string());
     }
 
+    std::optional<std::pair<std::string, RE::FormID>> ParseFormRef(std::string_view a_text) {
+        const auto bar = a_text.find('|');
+        if (bar == std::string_view::npos || bar == 0 || bar + 1 == a_text.size()) {
+            return std::nullopt;
+        }
+        auto hex = a_text.substr(bar + 1);
+        if (hex.starts_with("0x") || hex.starts_with("0X")) {
+            hex.remove_prefix(2);
+        }
+        RE::FormID id = 0;
+        const auto [end, ec] = std::from_chars(hex.data(), hex.data() + hex.size(), id, 16);
+        if (ec != std::errc{} || end != hex.data() + hex.size() || id > 0xFFFFFF) {
+            return std::nullopt;  // the load order byte is not part of it
+        }
+        return std::pair{ std::string(a_text.substr(0, bar)), id };
+    }
+
     Settings Parse(std::string_view a_text) {
         // Comments allowed (the last true): users annotate their config
         const auto root = nlohmann::json::parse(a_text, nullptr, true, true);
@@ -84,6 +101,27 @@ namespace StealthSenses::Config {
         Read(jt, "unknown_visibility", t.unknown_visibility);
         Read(jt, "blood_steps", t.blood_steps);
         Read(jt, "blood_visibility_bonus", t.blood_visibility_bonus);
+
+        auto& s = settings.step;
+        const auto& js = Section(root, "step");
+        Read(js, "enabled", s.enabled);
+        Read(js, "skill_floor", s.skill_floor);
+        Read(js, "sneak_mult", s.sneak_mult);
+        Read(js, "walk_mult", s.walk_mult);
+        Read(js, "sprint_mult", s.sprint_mult);
+        Read(js, "heavy_boots_mult", s.heavy_boots_mult);
+        Read(js, "heavy_armor_mult", s.heavy_armor_mult);
+        Read(js, "overencumbered_mult", s.overencumbered_mult);
+        Read(js, "light_foot_mult", s.light_foot_mult);
+        Read(js, "khajiit_mult", s.khajiit_mult);
+        Read(js, "bosmer_mult", s.bosmer_mult);
+        Read(js, "argonian_mult", s.argonian_mult);
+        Read(js, "beast_form_mult", s.beast_form_mult);
+        Read(js, "min_mult", s.min_mult);
+        Read(js, "max_mult", s.max_mult);
+        Read(js, "khajiit_races", s.khajiit_races);
+        Read(js, "argonian_races", s.argonian_races);
+        Read(js, "bosmer_races", s.bosmer_races);
 
         auto& k = settings.tracker;
         const auto& jk = Section(root, "tracker");
@@ -150,6 +188,7 @@ namespace StealthSenses::Config {
         Read(jd, "key_body", d.key_body);
         Read(jd, "key_paint", d.key_paint);
         Read(jd, "key_reset", d.key_reset);
+        Read(jd, "key_overlay", d.key_overlay);
 #endif
         Read(jd, "mark_key", d.mark_key);
 
@@ -162,6 +201,15 @@ namespace StealthSenses::Config {
         k.interval_ms      = std::clamp(k.interval_ms, t.poll_interval_ms, 10000);
         k.max_trackers     = std::max(k.max_trackers, 1);
         k.max_height_diff  = std::max(k.max_height_diff, 32.0f);  // 0 would rule out any uneven ground
+        // A multiplier below 0 would make visibility negative; the bounds keep every player trackable
+        for (float* mult : { &s.sneak_mult, &s.walk_mult, &s.sprint_mult, &s.heavy_boots_mult, &s.heavy_armor_mult,
+                 &s.overencumbered_mult, &s.light_foot_mult, &s.khajiit_mult, &s.bosmer_mult, &s.argonian_mult,
+                 &s.beast_form_mult }) {
+            *mult = std::max(*mult, 0.0f);
+        }
+        s.skill_floor = std::clamp(s.skill_floor, 0.0f, 1.0f);
+        s.min_mult    = std::max(s.min_mult, 0.0f);
+        s.max_mult    = std::max(s.max_mult, s.min_mult);
         // A bonus only makes an NPC better at spotting the player, never worse
         e.tracker_bonus     = std::clamp(e.tracker_bonus, 0, 100);
         e.after_fight_bonus = std::clamp(e.after_fight_bonus, 0, 100);

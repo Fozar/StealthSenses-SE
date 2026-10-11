@@ -61,6 +61,30 @@ Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`
 | `blood_steps` | `20` | Footprints marked as bloody after you are hit |
 | `blood_visibility_bonus` | `1.0` | Added to a bloody footprint's visibility |
 
+### `step` — how you walk
+
+A footprint's visibility is multiplied by how you stepped when you left it. The multipliers below combine; the result stays within `min_mult`…`max_mult`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Off = every step counts the same, as before 0.10 |
+| `skill_floor` | `0.6` | Multiplier at Sneak 100 (1.0 at 0, in between in proportion) |
+| `sneak_mult` | `0.7` | Sneaking |
+| `walk_mult` | `0.9` | Walking (running is 1.0) |
+| `sprint_mult` | `1.25` | Sprinting |
+| `heavy_boots_mult` | `1.15` | Heavy armor boots |
+| `heavy_armor_mult` | `1.1` | Heavy armor cuirass |
+| `overencumbered_mult` | `1.25` | Over-encumbered |
+| `light_foot_mult` | `0.8` | With the Light Foot perk |
+| `khajiit_mult` | `0.85` | Khajiit, everywhere |
+| `bosmer_mult` | `0.8` | Bosmer, on grass and dirt outdoors |
+| `argonian_mult` | `0.8` | Argonian, in mud outdoors |
+| `beast_form_mult` | `1.5` | Werewolf, or vampire lord on the ground (no footprints while levitating) |
+| `min_mult` / `max_mult` | `0.25` / `2.0` | Bounds of the combined multiplier |
+| `khajiit_races`, `argonian_races`, `bosmer_races` | vanilla races and their vampire variants | Races as `"Plugin.esp\|FormID"` (hex, without the load order byte). Add a custom race here to give it that race's step |
+
+You leave no footprints while jumping or falling.
+
 ### `tracker` — NPCs following the trail
 
 | Key | Default | Meaning |

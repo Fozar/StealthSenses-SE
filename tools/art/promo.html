@@ -19,15 +19,15 @@
                 background: linear-gradient(90deg, transparent, #d6b06e, transparent); opacity: .75; }
   .head .sub { font-size: 36px; color: #d3dbe8; }
 
-  /* #features: four panels */
-  .panels { position: absolute; top: 396px; left: 0; right: 0; display: flex; justify-content: center; gap: 32px; }
-  .panel { width: 410px; height: 520px; box-sizing: border-box; border-radius: 16px; overflow: hidden;
+  /* #features: five panels */
+  .panels { position: absolute; top: 396px; left: 0; right: 0; display: flex; justify-content: center; gap: 24px; }
+  .panel { width: 336px; height: 520px; box-sizing: border-box; border-radius: 16px; overflow: hidden;
            background: linear-gradient(180deg, rgba(20,29,48,.86), rgba(11,16,28,.92));
            box-shadow: 0 24px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(214,176,110,.22); }
   .panel svg { display: block; }
-  .panel .txt { padding: 26px 30px 0; }
+  .panel .txt { padding: 24px 26px 0; }
   .panel .k { font-size: 15px; color: #d6b06e; letter-spacing: .3em; }
-  .panel h3 { margin: 10px 0 14px; font-size: 31px; color: #f1f4fa; letter-spacing: .06em; }
+  .panel h3 { margin: 10px 0 14px; font-size: 28px; color: #f1f4fa; letter-spacing: .06em; }
   .panel p { margin: 0; font-size: 18.5px; line-height: 1.55; color: #c3ccdc; }
 
   /* #hunt: numbered stages along the trail */
@@ -161,12 +161,13 @@ if (MODE === 'features') {
     <div class="sub">Every step leaves a mark. Someone may read it.</div>`;
   const PANELS = [
     ['I', 'Your trail', 'Every step leaves a print. Soft ground holds it, stone barely does. Time, rain and snow wash it away; blood makes it last.', drawTrail],
-    ['II', 'Trackers', 'A wary enemy who spots a print takes up the trail: follows it, kneels to read it, searches where it runs out.', drawTracker],
-    ['III', 'Bodies', 'Leave one of their own lying in the snow, and the others come to look. From the body, they look for you.', drawBody],
-    ['IV', 'Sharper eyes', 'A wary enemy spots you a little sooner. No ESP: trackers walk with the game’s own AI, and once the fight starts, it’s all vanilla.', drawEye],
+    ['II', 'How you walk', 'Creep along and you barely leave a mark; sprint in heavy armor and every step tells. Skill, race, a werewolf’s weight: it all shows.', drawStep],
+    ['III', 'Trackers', 'A wary enemy who spots a print takes up the trail: follows it, kneels to read it, searches where it runs out.', drawTracker],
+    ['IV', 'Bodies', 'Leave one of their own lying in the snow, and the others come to look. From the body, they look for you.', drawBody],
+    ['V', 'Sharper eyes', 'A wary enemy spots you a little sooner. No ESP: trackers walk with the game’s own AI, and once the fight starts, it’s all vanilla.', drawEye],
   ];
   content.innerHTML = `<div class="panels">${PANELS.map(([k, t, p]) =>
-    `<div class="panel"><svg width="410" height="260" viewBox="0 0 410 260"></svg>
+    `<div class="panel"><svg width="336" height="213" viewBox="0 0 410 260"></svg>
      <div class="txt"><div class="small k">${k}</div><h3 class="title">${t.toUpperCase()}</h3><p class="body">${p}</p></div></div>`).join('')}</div>`;
   document.querySelectorAll('.panel svg').forEach((svg, i) => {
     defs(svg);
@@ -191,7 +192,16 @@ function drawTrail(svg) {
   const sn = el('g', { filter: 'url(#soft)' }, svg);
   for (let i = 0; i < 40; i++) el('circle', { cx: rnd() * 410, cy: rnd() * 200, r: .8 + rnd() * 1.6, fill: '#f2f5fb', opacity: (.3 + rnd() * .5).toFixed(2) }, sn);
 }
-// II — a hunter with a lantern behind the prints, dashed line up to it
+// II — two trails over the same snow: light, faint steps of a sneak; big, deep strides in plate
+function drawStep(svg) {
+  const light = el('path', { d: 'M 10 84 C 110 62 220 96 400 50', fill: 'none' }, svg);
+  trail(svg, light, { size: .44, spacing: 24, from: 6, fresh: () => .28 });
+  const heavy = el('path', { d: 'M 10 196 C 120 172 250 188 400 128', fill: 'none' }, svg);
+  trail(svg, heavy, { size: .8, spacing: 42, from: 14, fresh: () => 1 });
+  const sn = el('g', { filter: 'url(#soft)' }, svg);
+  for (let i = 0; i < 30; i++) el('circle', { cx: rnd() * 410, cy: rnd() * 200, r: .8 + rnd() * 1.6, fill: '#f2f5fb', opacity: (.3 + rnd() * .5).toFixed(2) }, sn);
+}
+// III — a hunter with a lantern behind the prints, dashed line up to it
 function drawTracker(svg) {
   const path = el('path', { d: 'M 70 215 C 150 200 170 140 240 130 S 340 110 390 50', fill: 'none' }, svg);
   trail(svg, path, { size: .6, spacing: 30, from: 110, fresh: (s, len) => .45 + .55 * s / len });
@@ -202,7 +212,7 @@ function drawTracker(svg) {
   const h = path.getPointAtLength(100);
   hunter(svg, h.x, h.y - 6, .9);
 }
-// III — a body in the snow; a tracker kneels by it, prints lead away
+// IV — a body in the snow; a tracker kneels by it, prints lead away
 function drawBody(svg) {
   const away = el('path', { d: 'M 210 150 C 270 140 300 100 400 70', fill: 'none' }, svg);
   trail(svg, away, { size: .55, spacing: 28, from: 40, fresh: () => .8 });
@@ -214,7 +224,7 @@ function drawBody(svg) {
   el('path', { d: 'M 88 4 L 120 -4 L 122 2 L 90 10 Z', 'fill-opacity': .7 }, b);   // dropped blade
   hunter(svg, 120, 100, .85, true);
 }
-// IV — the sneak eye wide open: vanilla takes over
+// V — the sneak eye wide open: vanilla takes over
 function drawEye(svg) {
   const g = el('g', { transform: 'translate(205 112)' }, svg);
   el('circle', { r: 120, fill: 'url(#lampGlow)' }, g);

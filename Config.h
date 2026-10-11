@@ -46,6 +46,35 @@ namespace StealthSenses::Config {
         bool operator==(const TrailSettings&) const = default;
     };
 
+    // 0.10: how the player steps. A footprint's visibility is multiplied by what the player was
+    // doing when it was left; the product is kept within min_mult..max_mult.
+    struct StepSettings {
+        bool  enabled             = true;
+        float skill_floor         = 0.6f;   // multiplier at Sneak 100 (1 at 0, linear between)
+        float sneak_mult          = 0.7f;
+        float walk_mult           = 0.9f;
+        float sprint_mult         = 1.25f;
+        float heavy_boots_mult    = 1.15f;  // heavy armor on the feet
+        float heavy_armor_mult    = 1.1f;   // heavy armor on the body
+        float overencumbered_mult = 1.25f;
+        float light_foot_mult     = 0.8f;   // Light Foot perk: "won't trigger pressure plates"
+        float khajiit_mult        = 0.85f;  // everywhere
+        float bosmer_mult         = 0.8f;   // on grass and dirt outside
+        float argonian_mult       = 0.8f;   // in mud outside
+        float beast_form_mult     = 1.5f;   // werewolf, vampire lord on the ground (levitating leaves none)
+        float min_mult            = 0.25f;
+        float max_mult            = 2.0f;
+        // Races as "Plugin.esm|FormID" (hex, without the load order byte); race mods add theirs
+        std::vector<std::string> khajiit_races  = { "Skyrim.esm|013745", "Skyrim.esm|088845" };
+        std::vector<std::string> argonian_races = { "Skyrim.esm|013740", "Skyrim.esm|08883A" };
+        std::vector<std::string> bosmer_races   = { "Skyrim.esm|013749", "Skyrim.esm|088884" };
+
+        bool operator==(const StepSettings&) const = default;
+    };
+
+    // "Plugin.esm|013745" -> { "Plugin.esm", 0x013745 }; nullopt if malformed.
+    std::optional<std::pair<std::string, RE::FormID>> ParseFormRef(std::string_view a_text);
+
     struct TrackerSettings {
         bool        enabled          = true;
         int         interval_ms      = 1000;
@@ -108,6 +137,7 @@ namespace StealthSenses::Config {
         STEALTHSENSES_DEV_SETTING(int, key_body, 0x50, "Num2: the NPC goes to the nearest body of the player's victims")
         STEALTHSENSES_DEV_SETTING(int, key_paint, 0x51, "Num3: paint a fresh trail ~30 m ahead of the player")
         STEALTHSENSES_DEV_SETTING(int, key_reset, 0x52, "Num0: release all trackers, forget memories and reactions")
+        STEALTHSENSES_DEV_SETTING(int, key_overlay, 0x4B, "Num4: show or hide the overlay (footprints, marks, trackers on screen)")
 
         bool operator==(const DebugSettings&) const = default;
     };
@@ -126,6 +156,7 @@ namespace StealthSenses::Config {
 
     struct Settings {
         TrailSettings   trail;
+        StepSettings    step;
         TrackerSettings tracker;
         DetectionSettings detection;
         DebugSettings   debug;

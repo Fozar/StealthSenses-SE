@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 — 2026-10-11
+
+- **How you walk** — your footprints depend on you now, not only on the ground, blood, age and weather. A high Sneak skill, sneaking, walking and the Light Foot perk leave fainter prints; sprinting, heavy boots and armor, being over-encumbered and the werewolf or vampire lord form leave deeper ones. Races: Khajiit step lightly everywhere, Bosmer on grass and dirt outdoors, Argonians in mud. A vampire lord leaves no prints while levitating. New `step` section; custom races can be added to the race lists.
+- **No footprints in the air** — jumping or falling off a cliff no longer leaves footprints hanging in mid-air.
+- **Save data** — footprints keep how you stepped. Saves from 0.9 and earlier load fine (their footprints count as a plain step).
+
 ## 0.9.0 — 2026-10-10
 
 - **Sharper senses** — an enemy with a reason to be wary spots you a little sooner: its stealth meter on you reads a few points higher while it is on your trail (+15), after a fight with you is over (+10) or after it found a body (+10). In combat nothing changes — the vanilla search after an arrow from hiding is as easy to slip as before. New `detection` section: `enabled`, `tracker_bonus`, `after_fight_bonus`, `found_body_bonus`.

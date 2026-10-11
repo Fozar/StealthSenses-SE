@@ -22,8 +22,28 @@
 // The trail's pure rules: no game state, settings passed in. Trail.cpp applies them to the live
 // trail; the unit tests (tests/) call them directly.
 namespace StealthSenses::Trail {
-    // Visibility in [0, ~2]: base by material (+blood) halved every halflife_hours of age; in
-    // bad weather the halflife is shorter.
+    enum class Gait : std::uint8_t { kRun, kWalk, kSprint, kSneak };
+    enum class RaceKind : std::uint8_t { kOther, kKhajiit, kArgonian, kBosmer };
+
+    // What the player was doing on a step; Trail.cpp reads it from the game
+    struct Stride {
+        float           sneakSkill     = 0.0f;
+        Gait            gait           = Gait::kRun;
+        bool            heavyBoots     = false;
+        bool            heavyBody      = false;
+        bool            overEncumbered = false;
+        bool            lightFoot      = false;
+        bool            beastForm      = false;  // werewolf, vampire lord on the ground
+        bool            interior       = false;
+        RaceKind        race           = RaceKind::kOther;
+        RE::MATERIAL_ID material       = RE::MATERIAL_ID::kNone;
+    };
+
+    // Footprint::step for this stride: the product of the factors, within min_mult..max_mult
+    float StepMult(const Stride& a_stride, const Config::StepSettings& a_cfg);
+
+    // Visibility in [0, ~2]: base by material times Footprint::step (+blood), halved every
+    // halflife_hours of age; in bad weather the halflife is shorter.
     float Visibility(const Footprint& a_fp, float a_nowHours, bool a_badWeather, const Config::TrailSettings& a_cfg);
 
     // Drops footprints below a_minVisibility even in clear weather: visibility only falls with

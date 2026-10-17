@@ -15,10 +15,11 @@ Rendered results: `docs/media/cover.png`, `docs/media/banner-1300x372.png` (+ `-
 
 ## Promo cards
 
-`promo.html` — two 1920×1080 mod page images, same night snowfield as the cover:
-- `promo.html#features` — what the mod does in four panels (trail, trackers, bodies, vanilla AI) → `docs/media/promo-features.png`;
-- `promo.html#hunt` — one hunt seen from above, numbered stages → `docs/media/promo-hunt.png`.
+`promo.html` — three 1920×1080 mod page images, same night snowfield as the cover:
+- `promo.html#features` — what the mod does in five panels (trail, how you walk, trackers, bodies, sharper eyes) → `docs/media/promo-features.png`;
+- `promo.html#hunt` — one hunt seen from above, numbered stages → `docs/media/promo-hunt.png`;
+- `promo.html#senses` — who reads the trail and when, three panels (different eyes, night, alarming tracks) → `docs/media/promo-senses.png`.
 
-Render both with `sh render.sh` (or `sh render.sh hunt`; `EDGE=` overrides the Edge path).
+Render all with `sh render.sh` (or `sh render.sh senses`; `EDGE=` overrides the Edge path).
 The texts are deliberately general — no numbers, settings or versions — but they describe behaviour:
 **when a feature shown here is added, removed or changes how it looks to the player, update the card and re-render.**

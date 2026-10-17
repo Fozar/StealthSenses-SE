@@ -21,6 +21,7 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
     CHECK(shipped.trail == defaults.trail);
     CHECK(shipped.step == defaults.step);
     CHECK(shipped.tracker == defaults.tracker);
+    CHECK(shipped.dark == defaults.dark);
     CHECK(shipped.detection == defaults.detection);
     CHECK(shipped.debug == defaults.debug);
 
@@ -37,8 +38,11 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
     }
     for (const char* key : { "notice_line_of_sight", "body_found_seconds", "body_notice_radius", "body_know_radius",
              "body_max_age_hours", "give_up_seconds", "leash_distance", "tired_cooldown",
-             "fight_pause_seconds" }) {
+             "fight_pause_seconds", "alarm_beast", "alarm_blood" }) {
         CHECK_MESSAGE(root["tracker"].contains(key), key);
+    }
+    for (const char* key : { "enabled", "night_penalty", "interior", "dusk_hour", "night_hour", "dawn_hour", "day_hour" }) {
+        CHECK_MESSAGE(root["dark"].contains(key), key);
     }
 }
 
@@ -115,4 +119,15 @@ TEST_CASE("config: form references \"Plugin|FormID\"") {
     CHECK_FALSE(Config::ParseFormRef("Skyrim.esm|"));
     CHECK_FALSE(Config::ParseFormRef("Skyrim.esm|xyz"));
     CHECK_FALSE(Config::ParseFormRef("Skyrim.esm|01013745"));  // with a load order byte
+}
+
+TEST_CASE("config: darkness stays in 0..1, its ramps run forward") {
+    const auto s = Config::Parse(R"({
+        "dark": { "night_penalty": 2, "interior": -1, "dusk_hour": 20, "night_hour": 19, "dawn_hour": 30, "day_hour": 4 }
+    })");
+    CHECK(s.dark.night_penalty == 1.0f);
+    CHECK(s.dark.interior == 0.0f);
+    CHECK(s.dark.night_hour >= s.dark.dusk_hour);
+    CHECK(s.dark.dawn_hour == 24.0f);
+    CHECK(s.dark.day_hour >= s.dark.dawn_hour);
 }

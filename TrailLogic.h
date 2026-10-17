@@ -54,6 +54,10 @@ namespace StealthSenses::Trail {
     // always kept); whatever is still over the limit goes oldest first.
     void Thin(std::deque<Footprint>& a_trail, const Config::TrailSettings& a_cfg);
 
+    // 0.11: how dark it is for reading footprints, 0 (day) .. 1 (night); a_hour is the game hour
+    // 0..24. Outside by the hour with ramps at dusk and dawn, inside dark.interior.
+    float Darkness(float a_hour, bool a_exterior, const Config::DarkSettings& a_cfg);
+
     // seq grows along the trail, with gaps where Prune and Thin removed footprints.
     const Footprint* FindBySeq(const std::deque<Footprint>& a_trail, std::uint32_t a_seq);
 }

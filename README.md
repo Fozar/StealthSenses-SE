@@ -4,7 +4,7 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 
 **Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163 · **Source:** https://github.com/Fozar/StealthSenses-SE
 
-> **Status: early access (0.8.x).** The trail mechanic works and is tested in game on AE 1.7.104. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
+> **Status: early access (0.11.x).** The trail mechanic works and is tested in game on AE 1.7.104. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
 
 ---
 
@@ -12,6 +12,8 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 
 - **Your trail** — every step you take on foot leaves a footprint. Soft ground holds a clear print, stone barely any; prints fade over game time (faster in rain or snow), water breaks the trail, blood makes it last. The trail is saved with your game.
 - **Trackers** — a hostile humanoid with a reason to be suspicious that sees one of your prints in front of it takes up the trail: draws its weapon, follows print to print, bends down to examine one, searches where the trail runs out, and gives up after a while.
+- **Different eyes** — not every enemy reads a trail equally well. Bosmer, hunters, the Forsworn, the Alik'r, the Thalmor, the Dark Brotherhood, the Silver Hand and the Dawnguard notice prints from farther away and make out fainter ones. Darkness hides your prints from most enemies, but not from Khajiit and vampires, and a vampire picks out a bloody print from afar. Falmer are blind to them. The profiles are a JSON file that you or other mods can extend.
+- **Alarming tracks** — a werewolf's or a vampire lord's prints, or bloody ones, alarm even a calm enemy who sees them.
 - **Bodies** — an enemy that finds the body of one of its own you killed goes to it and looks for your trail from there.
 - **Sharper senses** — a suspicious enemy (on your trail, after a fight with you, or having found a body) spots you sooner: its stealth meter on you reads a few points higher.
 - **Vanilla AI stays in charge** — trackers walk with vanilla packages and pathfinding; one that spots you or fights you (or your followers) is handed back to the vanilla AI at once. A fight with someone else — a wolf on the road — only interrupts the chase.
@@ -33,7 +35,7 @@ Skyrim VR is not supported.
 
 ## Installation
 
-Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll` and `SKSE\Plugins\StealthSensesConfig.json` into `Data\SKSE\Plugins\`. No ESP, no load order requirements.
+Install the archive with a mod manager, or copy `SKSE\Plugins\StealthSenses.dll`, `SKSE\Plugins\StealthSensesConfig.json` and `SKSE\Plugins\StealthSensesProfiles.json` into `Data\SKSE\Plugins\`. No ESP, no load order requirements.
 
 **Uninstalling** mid-playthrough is safe: the plugin keeps its data in the SKSE co-save. If you save while an NPC is tracking you, the plugin undoes its changes to that NPC the next time the save is loaded — so load the save once with the plugin still installed before removing it.
 
@@ -105,7 +107,8 @@ You leave no footprints while jumping or falling.
 | `tired_cooldown` | `180` | After giving up like that it takes up no trail for this long |
 | `fight_pause_seconds` | `60` | A tracker fighting someone else (a wolf) goes back to your trail after the fight if it lasted no longer than this (0 = drops the trail) |
 | `require_hostile` | `true` | Only NPCs hostile to you track |
-| `humanoids_only` | `true` | Only humanoids track (no animals) |
+| `alarm_beast` | `true` | A werewolf's or a vampire lord's footprint makes even a calm hostile take up the trail |
+| `alarm_blood` | `true` | …and so does a bloody one |
 | `include_combat` | `false` | Keep tracking NPCs that are in combat (they ignore packages; leave off) |
 | `max_trackers` | `4` | Trackers at the same time |
 | `min_visibility` | `0.2` | A footprint at least this visible is *clear*: read from afar and across gaps |
@@ -127,6 +130,28 @@ You leave no footprints while jumping or falling.
 | `stuck_seconds` | `6` | A tracker that does not move this long is sent elsewhere |
 | `stuck_give_up` | `20` | …and given up after this much standing still in total |
 | `repickup_seconds` | `15` | After giving up, an NPC ignores trails for this long |
+
+### `dark` — night hides footprints
+
+Outdoors, darkness follows the hour; indoors it is constant (torches are not taken into account). How much an NPC loses by it depends on its profile (`night`).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Off: darkness changes nothing |
+| `night_penalty` | `0.5` | Share of a footprint's visibility lost in full darkness |
+| `interior` | `0.3` | Darkness indoors (0 = daylight, 1 = night) |
+| `dusk_hour` / `night_hour` | `18` / `21` | Darkness grows from dusk to night… |
+| `dawn_hour` / `day_hour` | `5` / `7` | …and fades from dawn to day |
+
+### Sense profiles — `StealthSensesProfiles.json`
+
+Who reads footprints and how well. A profile has `tracking` (multiplies footprint visibility and the distance a print is noticed from; 0 = never reads them), `night` (how much darkness hurts: 1 = fully, 0 = sees in the dark) and `blood` (an extra multiplier for bloody prints). A rule matches on a `keyword`, `race`, `class`, `faction` or `npc` given as `"Plugin.esp|FormID"`, and rules apply in that order, so a faction overrides a race. `tracking_mult` and `blood_mult` multiply the value set before them instead of replacing it: a Bosmer hunter keeps the Bosmer bonus. Anything no rule matches gets `default`; it is `tracking: 0`, so only NPCs with the vanilla `ActorTypeNPC` keyword read footprints.
+
+Each rule in the file has a `why` field that says where it comes from. Mods can add `StealthSensesProfiles_<Name>.json` next to it instead of editing it; such files are read after it, in name order.
+
+```json
+{ "rules": [ { "faction": "MyMod.esp|000D62", "name": "rangers", "tracking_mult": 1.4 } ] }
+```
 
 ### `detection` — suspicious NPCs see you sooner
 
@@ -179,7 +204,7 @@ The trace records your position, every nearby NPC's state and every decision the
 
 ## FAQ
 
-**Who can track me?** Only humanoid NPCs, the ones whose race has the vanilla `ActorTypeNPC` keyword: all playable races (vampire variants included), Dremora and Snow Elves. Dwarven automatons, Falmer, draugr and skeletons, hagravens, spriggans, giants, trolls, rieklings, werewolves, animals, dragons and other daedra never do. Races from mods track if they carry `ActorTypeNPC`, which playable-race mods almost always do.
+**Who can track me?** Only humanoid NPCs, the ones whose race has the vanilla `ActorTypeNPC` keyword: all playable races (vampire variants included), Dremora and Snow Elves. Dwarven automatons, Falmer, draugr and skeletons, hagravens, spriggans, giants, trolls, rieklings, werewolves, animals, dragons and other daedra never do. Races from mods track if they carry `ActorTypeNPC`, which playable-race mods almost always do. How well each of them reads a trail is set in `StealthSensesProfiles.json`.
 
 **Does it work with Footprints, Dynamic Footprints or Dynamic Terrain Deformation?** Yes, alongside them; it replaces nothing. Those mods draw prints you can see; Stealth Senses draws nothing and keeps its own invisible trail for the AI. The two are separate: a print you see is not necessarily one an enemy reads, and on stone, where you see none, a tracker can still make out a faint one up close.
 

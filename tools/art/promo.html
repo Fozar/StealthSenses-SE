@@ -1,6 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Mod page images, 1920x1080: promo.html#features (what the mod does), promo.html#hunt (how a tracker reads a trail).
+<!-- Mod page images, 1920x1080: promo.html#features (what the mod does), promo.html#hunt (how a tracker reads a trail),
+     promo.html#senses (who reads it and when).
      Kept general on purpose (no numbers, no versions); update when a feature listed here changes. See README.md -->
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@1,500&family=Inter:wght@400;500;600&display=block" rel="stylesheet">
 <style>
@@ -29,6 +30,12 @@
   .panel .k { font-size: 15px; color: #d6b06e; letter-spacing: .3em; }
   .panel h3 { margin: 10px 0 14px; font-size: 28px; color: #f1f4fa; letter-spacing: .06em; }
   .panel p { margin: 0; font-size: 18.5px; line-height: 1.55; color: #c3ccdc; }
+  /* #senses: three wide panels */
+  .panels.wide { gap: 32px; }
+  .panels.wide .panel { width: 540px; height: 560px; }
+  .panels.wide .panel .txt { padding: 26px 32px 0; }
+  .panels.wide .panel h3 { font-size: 31px; }
+  .panels.wide .panel p { font-size: 20px; }
 
   /* #hunt: numbered stages along the trail */
   .stage-cap { position: absolute; width: 270px; text-align: center; transform: translateX(-50%); color: #f1f4fa; }
@@ -310,6 +317,75 @@ if (MODE === 'hunt') {
       ${side < 0 ? `<h4>${t}</h4><p>${p}</p><div class="n" style="margin-top:12px">${i + 1}</div>`
                  : `<div class="n">${i + 1}</div><h4>${t}</h4><p>${p}</p>`}</div>`;
   }).join('') + `<div class="foot sub">Walk on stone, wade through water, keep out of sight, and it goes cold.</div>`;
+}
+
+// ---------- #senses ----------
+if (MODE === 'senses') {
+  head.innerHTML = `<div class="small">STEALTH SENSES · WHO READS YOUR TRAIL</div>
+    <div class="title">NOT EVERY EYE IS THE SAME</div><div class="rule"></div>
+    <div class="sub">Who is looking, when, and what you left behind.</div>`;
+  const PANELS = [
+    ['I', 'Different eyes', 'A Bosmer hunter reads prints a Nord walks past. Hunters, the Forsworn and the Dark Brotherhood track better; the Falmer never look down.', drawEyes],
+    ['II', 'Night', 'After dark your prints are harder to make out, with a slow dusk and dawn. Not for Khajiit and vampires: they see in the dark.', drawNight],
+    ['III', 'Alarming tracks', 'A werewolf’s or a vampire lord’s tracks, or blood, put even a calm enemy on your trail. A vampire spots a bloody print from twice as far.', drawAlarm],
+  ];
+  content.innerHTML = `<div class="panels wide">${PANELS.map(([k, t, p]) =>
+    `<div class="panel"><svg width="540" height="342" viewBox="0 0 410 260"></svg>
+     <div class="txt"><div class="small k">${k}</div><h3 class="title">${t.toUpperCase()}</h3><p class="body">${p}</p></div></div>`).join('')}</div>`;
+  document.querySelectorAll('.panel svg').forEach((svg, i) => {
+    defs(svg);
+    el('rect', { width: 410, height: 260, fill: 'url(#snowPanel)' }, svg);
+    el('rect', { width: 410, height: 260, filter: 'url(#drift)', opacity: .7 }, svg);
+    PANELS[i][3](svg);
+    el('rect', { y: 200, width: 410, height: 60, fill: 'url(#panelFade)' }, svg);
+  });
+  el('defs', {}, document.querySelector('.panel svg')).innerHTML =
+    `<linearGradient id="panelFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#141d30" stop-opacity="0"/><stop offset="1" stop-color="#141d30" stop-opacity=".9"/></linearGradient>`;
+}
+// I — the same faint trail; in the tracker's lantern light the prints stand out
+function drawEyes(svg) {
+  const path = el('path', { d: 'M 10 210 C 120 200 170 120 250 120 S 360 110 400 60', fill: 'none' }, svg);
+  const len = path.getTotalLength();
+  el('ellipse', { cx: 250, cy: 125, rx: 120, ry: 60, fill: LAMP, 'fill-opacity': .1, filter: 'url(#glow)' }, svg);
+  trail(svg, path, { size: .58, spacing: 30, from: 8, fresh: (s, l) => s / l > .3 && s / l < .75 ? .9 : .12 });
+  const h = path.getPointAtLength(.28 * len);
+  hunter(svg, h.x, h.y - 6, .85);
+}
+// II — moonlit night: prints nearly gone, a cat's eye still finds them
+function drawNight(svg) {
+  const path = el('path', { d: 'M 10 200 C 120 190 200 150 260 160 S 360 170 400 120', fill: 'none' }, svg);
+  trail(svg, path, { size: .58, spacing: 30, from: 8, fresh: () => .5 });
+  el('rect', { width: 410, height: 260, fill: '#03060d', 'fill-opacity': .62 }, svg);
+  el('circle', { cx: 340, cy: 52, r: 26, fill: '#e9eef7', 'fill-opacity': .85 }, svg);
+  el('circle', { cx: 352, cy: 44, r: 24, fill: '#141d30' }, svg);
+  const g = el('g', { transform: 'translate(120 78)' }, svg);
+  el('ellipse', { rx: 70, ry: 40, fill: LAMP, 'fill-opacity': .18, filter: 'url(#glow)' }, g);
+  el('path', { d: 'M -46 0 C -24 -24 24 -24 46 0 C 24 24 -24 24 -46 0 Z', fill: '#e8b85a', stroke: GOLD, 'stroke-width': 2 }, g);
+  el('ellipse', { rx: 4.5, ry: 17, fill: INK }, g);
+  // prints under the eye's gaze read clearly again
+  const lit = el('g', { opacity: .9 }, svg);
+  trail(lit, path, { size: .58, spacing: 30, from: 98, to: 220, fresh: () => .75 });
+}
+// Werewolf paw: a pad, four toes, claws
+function paw(parent, x, y, angle, size, tint) {
+  const g = el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${angle.toFixed(1)}) scale(${size})`, fill: tint || '#1a2438', 'fill-opacity': .8, filter: 'url(#soft)' }, parent);
+  el('path', { d: 'M -14 6 C -16 -6 -6 -12 0 -12 C 6 -12 16 -6 14 6 C 12 16 -12 16 -14 6 Z' }, g);
+  for (const [tx, ty] of [[-17, -16], [-7, -26], [7, -26], [17, -16]]) {
+    el('ellipse', { cx: tx, cy: ty, rx: 5, ry: 7 }, g);
+    el('path', { d: `M ${tx - 2} ${ty - 6} L ${tx * 1.1} ${ty - 17} L ${tx + 2} ${ty - 6} Z` }, g);
+  }
+}
+// III — a werewolf's paws, the last ones bloody; an enemy by the fire looks up
+function drawAlarm(svg) {
+  const path = el('path', { d: 'M 10 220 C 110 210 160 150 240 150 S 330 120 400 70', fill: 'none' }, svg);
+  const len = path.getTotalLength();
+  for (let s = 10, i = 0; s < len; s += 44, i++) {
+    const p = path.getPointAtLength(s), q = path.getPointAtLength(Math.min(len, s + 3));
+    const a = Math.atan2(q.y - p.y, q.x - p.x), side = i % 2 ? 1 : -1;
+    paw(svg, p.x - Math.sin(a) * 14 * side, p.y + Math.cos(a) * 14 * side, a * 180 / Math.PI + 90, .9, s / len > .6 ? '#6b1a1a' : null);
+  }
+  hunter(svg, 110, 96, .8, true);
+  el('text', { x: 92, y: 40, 'text-anchor': 'middle', class: 'title', 'font-size': 40, fill: GOLD }, svg).textContent = '!';
 }
 
 // overlay on everything

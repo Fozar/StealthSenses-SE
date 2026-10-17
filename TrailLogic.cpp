@@ -89,7 +89,7 @@ namespace StealthSenses::Trail {
             break;
         case RaceKind::kArgonian:
             if (!a_stride.interior && mat == M::kMud) {
-                mult *= a_cfg.argonian_mult;  // marsh people [assumption: lore not checked yet]
+                mult *= a_cfg.argonian_mult;  // race description: "well-suited for the treacherous swamps" [esm]; at home in mud [UESP Lore:Argonian]
             }
             break;
         case RaceKind::kOther:
@@ -147,6 +147,27 @@ namespace StealthSenses::Trail {
         while (a_trail.size() > limit) {
             a_trail.pop_front();
         }
+    }
+
+    float Darkness(float a_hour, bool a_exterior, const Config::DarkSettings& a_cfg) {
+        if (!a_cfg.enabled) {
+            return 0.0f;
+        }
+        if (!a_exterior) {
+            return a_cfg.interior;
+        }
+        // Linear in the ramps; a ramp of zero length is a step
+        auto ramp = [](float a_h, float a_from, float a_to) {
+            return a_to > a_from ? std::clamp((a_h - a_from) / (a_to - a_from), 0.0f, 1.0f) : (a_h >= a_to ? 1.0f : 0.0f);
+        };
+        const float h = std::fmod(std::fmod(a_hour, 24.0f) + 24.0f, 24.0f);
+        if (h >= a_cfg.day_hour && h < a_cfg.dusk_hour) {
+            return 0.0f;
+        }
+        if (h >= a_cfg.dusk_hour) {
+            return ramp(h, a_cfg.dusk_hour, a_cfg.night_hour);
+        }
+        return 1.0f - ramp(h, a_cfg.dawn_hour, a_cfg.day_hour);  // before day_hour: night, then dawn
     }
 
     const Footprint* FindBySeq(const std::deque<Footprint>& a_trail, std::uint32_t a_seq) {

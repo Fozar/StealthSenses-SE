@@ -18,8 +18,10 @@
 
 #include "Config.h"
 #include "Detection.h"
+#include "Profiles.h"
 #include "Telemetry.h"
 #include "Trail.h"
+#include "TrailLogic.h"
 
 #include <numbers>
 #include <random>
@@ -98,6 +100,7 @@ namespace StealthSenses::Trackers {
             float                            total      = 0.0f; // since it started tracking: gets tired
             RE::NiPoint3                     startPos;          // where it started: leash
             float                            fight      = 0.0f; // > 0: fighting someone else, trail on hold
+            std::string                      profile;           // its sense profile, for the dev overlay
         };
 
         // Survives dropping a tracker: an NPC that lost the trail or saw the player does not
@@ -646,7 +649,12 @@ namespace StealthSenses::Trackers {
                 sight == Sight::Blocked ? "blocked" : sight == Sight::Seen ? "NOT blocked" : "unknown, no havok world");
         }
 
-        Trail::Prune(now, cfg.faint_visibility);
+        // Kept while the keenest profile could still read it
+        Trail::Prune(now, cfg.faint_visibility / Profiles::MaxBoost());
+
+        // 0.11: darkness by the hour outside, constant inside; profiles without night vision lose by it
+        const auto& dark     = Config::Get().dark;
+        const float darkness = Trail::Darkness(calendar->GetHour(), exterior, dark);
 
         // The player's victims lying here now; gone and old ones are forgotten (an old body is no
         // news, and the footprints around it have faded anyway)
@@ -664,28 +672,48 @@ namespace StealthSenses::Trackers {
             return false;
         });
 
-        // Footprints worth a look at all: clear ones (>= min_visibility) are read from afar, faint
-        // ones (>= faint_visibility, e.g. stone at 0.15) only within close_read_radius of the NPC —
-        // in a stone dungeon nothing was readable and trackers only searched (test 0.4.1)
+        // Footprints worth a look at all, with the trail's own visibility; each NPC reads them through
+        // its profile (Reading below). The counts are for the telemetry: as a plain human reads them.
         struct Candidate {
             const Trail::Footprint* fp;
-            bool                    clear;
+            float                   vis;
         };
         std::vector<Candidate> candidates;
         std::size_t            clearCount = 0;
-        for (const auto& fp : Trail::Footprints()) {
-            if (fp.space != space) {
-                continue;
-            }
-            const float vis = Trail::Visibility(fp, now, badWeather);
-            if (vis >= cfg.faint_visibility) {
-                const bool clear = vis >= cfg.min_visibility;
-                candidates.push_back({ &fp, clear });
-                clearCount += clear;
+        std::size_t            faintCount = 0;
+        {
+            const Profiles::Profile human;
+            for (const auto& fp : Trail::Footprints()) {
+                if (fp.space != space) {
+                    continue;
+                }
+                const float vis = Trail::Visibility(fp, now, badWeather);
+                if (vis * Profiles::MaxBoost() >= cfg.faint_visibility) {
+                    candidates.push_back({ &fp, vis });
+                    const float read = Profiles::Perceived(vis, fp.flags & Trail::kBlood, darkness, dark.night_penalty, human);
+                    clearCount += read >= cfg.min_visibility;
+                    faintCount += read >= cfg.faint_visibility && read < cfg.min_visibility;
+                }
             }
         }
-        auto readableFrom = [&](const Candidate& a_c, const RE::NiPoint3& a_npc) {
-            return a_c.clear || a_npc.GetDistance(a_c.fp->pos) <= cfg.close_read_radius;
+        // How one NPC reads them: clear ones (>= min_visibility) from afar, faint ones (>=
+        // faint_visibility, e.g. stone at 0.15) only within close_read_radius — in a stone dungeon
+        // nothing was readable and trackers only searched (test 0.4.1)
+        struct Reading {
+            const Profiles::Profile& profile;
+            float                    darkness;
+            float                    nightPenalty;
+            const Config::TrackerSettings& cfg;
+
+            float Perceived(const Candidate& a_c) const {
+                return Profiles::Perceived(a_c.vis, a_c.fp->flags & Trail::kBlood, darkness, nightPenalty, profile);
+            }
+            bool Clear(const Candidate& a_c) const { return Perceived(a_c) >= cfg.min_visibility; }
+            bool ReadableFrom(const Candidate& a_c, const RE::NiPoint3& a_at) const {
+                const float vis = Perceived(a_c);
+                return vis >= cfg.min_visibility ||
+                       (vis >= cfg.faint_visibility && a_at.GetDistance(a_c.fp->pos) <= cfg.close_read_radius);
+            }
         };
 
         // A memory is kept while its cooldown runs or its last footprint is still in the trail;
@@ -705,7 +733,7 @@ namespace StealthSenses::Trackers {
             Telemetry::Write({ { "type", "player" }, { "pos", Telemetry::Vec(player->GetPosition()) },
                 { "space", Telemetry::Hex(space) }, { "sneak", player->IsSneaking() },
                 { "run", player->IsRunning() }, { "combat", player->IsInCombat() },
-                { "weather", badWeather }, { "readable", clearCount }, { "faint", candidates.size() - clearCount } });
+                { "weather", badWeather }, { "dark", darkness }, { "readable", clearCount }, { "faint", faintCount } });
         }
 
         std::unordered_set<RE::FormID> seen;
@@ -723,6 +751,8 @@ namespace StealthSenses::Trackers {
             const int  meter   = StealthMeter(level);
             const bool alerted = a_actor->GetActorRuntimeData().currentProcess->lowProcessFlags.all(
                 RE::AIProcess::LowProcessFlags::kAlert);
+            const auto    profile = Profiles::For(a_actor);
+            const Reading reading{ profile, darkness, dark.night_penalty, cfg };
 
             if (Telemetry::Enabled()) {
                 // State before this tick's decision; the decision itself goes out as a "log" record
@@ -733,7 +763,8 @@ namespace StealthSenses::Trackers {
                     { "combat", combat }, { "hostile", hostile }, { "afterFight", g_recentCombat.contains(id) }, { "foundBody", g_foundBody.contains(id) },
                     { "sitsleep", state ? static_cast<int>(state->GetSitSleepState()) : -1 },
                     { "weapon", state && state->IsWeaponDrawn() },
-                    { "pkg", Telemetry::Hex(package ? package->GetFormID() : 0) } };
+                    { "pkg", Telemetry::Hex(package ? package->GetFormID() : 0) },
+                    { "prof", { { "name", profile.name }, { "tracking", profile.tracking }, { "night", profile.night }, { "blood", profile.blood } } } };
                 // Vanilla "dead bodies this NPC detected" list, to learn what fills it
                 if (const auto* mh = a_actor->GetActorRuntimeData().currentProcess->middleHigh; mh && !mh->deadDetectList.empty()) {
                     npc["deadList"] = mh->deadDetectList.size();
@@ -781,9 +812,10 @@ namespace StealthSenses::Trackers {
             if (cfg.require_hostile && !hostile) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
-            // Animals hear and see far better (meter 86-98 in test 0.6.0) and count as hostile:
-            // rabbits and deer tailed the player. Creatures come back with scent/sense profiles.
-            if (cfg.humanoids_only && g_humanoid && !a_actor->HasKeyword(g_humanoid)) {
+            // Reading footprints takes a mind: animals, automatons and the undead have tracking 0 in
+            // the profiles (before 0.11 humanoids_only). Animals see and hear far better (meter 86-98
+            // in test 0.6.0) and count as hostile: rabbits and deer tailed the player.
+            if (profile.tracking <= 0.0f) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
             std::optional<RE::NiPoint3> bodyPos;
@@ -828,7 +860,10 @@ namespace StealthSenses::Trackers {
                 const bool afterFight = g_recentCombat.contains(id);
                 const bool foundBody  = g_foundBody.contains(id);
                 const bool suspicious = cfg.debug_all_npcs || alerted || afterFight || foundBody || meter >= cfg.caution_level;
-                if (!suspicious || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
+                // 0.11: a calm one still takes up an alarming footprint — a werewolf's or a vampire
+                // lord's, or a bloody one — if it sees it
+                const bool anyAlarm = cfg.alarm_beast || cfg.alarm_blood;
+                if ((!suspicious && !anyAlarm) || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
                     return RE::BSContainer::ForEachResult::kContinue;
                 }
                 const auto memory = g_memory.find(id);
@@ -844,13 +879,19 @@ namespace StealthSenses::Trackers {
 
                 // Notices only a footprint right next to it and in front of it (GetHeadingAngle:
                 // degrees between where the NPC faces and the point [CL]) and not hidden from its
-                // eyes; takes the freshest such one
+                // eyes; takes the freshest such one. The radius grows with the profile's tracking (and
+                // blood for a bloody footprint). Not suspicious: only an alarming footprint will do.
+                auto alarming = [&](const Trail::Footprint* a_fp) {
+                    return (cfg.alarm_beast && (a_fp->flags & (Trail::kBeast | Trail::kVampireLord))) ||
+                           (cfg.alarm_blood && (a_fp->flags & Trail::kBlood));
+                };
                 std::vector<const Trail::Footprint*> inView;
                 int                                  nearCount = 0;
                 for (const auto& c : candidates) {
-                    const auto* fp = c.fp;
-                    if (fp->seq <= skipSeq || pos.GetDistance(fp->pos) > cfg.notice_radius || OtherLevel(pos, fp->pos) ||
-                        !readableFrom(c, pos)) {
+                    const auto* fp     = c.fp;
+                    const float radius = Profiles::NoticeRadius(cfg.notice_radius, fp->flags & Trail::kBlood, profile);
+                    if (fp->seq <= skipSeq || (!suspicious && !alarming(fp)) || pos.GetDistance(fp->pos) > radius ||
+                        OtherLevel(pos, fp->pos) || !reading.ReadableFrom(c, pos)) {
                         continue;
                     }
                     ++nearCount;
@@ -876,7 +917,11 @@ namespace StealthSenses::Trackers {
                         { "picked", best != nullptr } });
                 }
                 if (best) {
-                    Note(std::format("{} noticed footprint #{} (meter {}, alert {}, after fight {}, found body {})", Describe(a_actor), best->seq, meter, alerted, afterFight, foundBody));
+                    const char* alarm = (best->flags & Trail::kBeast)       ? ", a werewolf's" :
+                                        (best->flags & Trail::kVampireLord) ? ", a vampire lord's" :
+                                        (best->flags & Trail::kBlood)       ? ", bloody" : "";
+                    (suspicious ? Note : Say)(std::format("{} noticed footprint #{}{} (meter {}, alert {}, after fight {}, found body {}, profile {})",
+                        Describe(a_actor), best->seq, alarm, meter, alerted, afterFight, foundBody, profile.name));
                     State state;
                     if (Steer(player, a_actor, state, *best)) {
                         g_trackers.emplace(id, std::move(state));
@@ -885,7 +930,8 @@ namespace StealthSenses::Trackers {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
 
-            auto& state = tracked->second;
+            auto& state   = tracked->second;
+            state.profile = profile.name;
             if (state.fight > 0.0f) {
                 // The fight is over and the player is not in sight: back to where it was. The fight
                 // dragged it off and vanilla may have dropped the alert; the mode starts over.
@@ -971,7 +1017,7 @@ namespace StealthSenses::Trackers {
                 // A faint footprint is also read around the footprint the NPC was sent to: travel
                 // stops ~270 short of it, so measured from the NPC alone the next faint one was
                 // always just out of reach and the tracker stopped at every step (fox, test 0.6.0)
-                const bool readable = readableFrom(c, pos) || state.trailPos.GetDistance(fp->pos) <= cfg.close_read_radius;
+                const bool readable = reading.ReadableFrom(c, pos) || reading.ReadableFrom(c, state.trailPos);
                 if (fp->seq > state.lastSeq && pos.GetDistance(fp->pos) <= cfg.lead_distance && readable &&
                     !OtherLevel(pos, fp->pos) && (!next || fp->seq > next->seq)) {
                     next = fp;
@@ -986,7 +1032,7 @@ namespace StealthSenses::Trackers {
             if (!next) {
                 for (const auto& c : candidates) {
                     const auto* fp = c.fp;
-                    if (c.clear && fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
+                    if (reading.Clear(c) && fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
                         !OtherLevel(state.trailPos, fp->pos) && !OtherLevel(pos, fp->pos) &&
                         (!next || (freshest ? fp->seq > next->seq : fp->seq < next->seq))) {
                         next = fp;
@@ -1253,6 +1299,9 @@ namespace StealthSenses::Trackers {
             }
             if (state.fight > 0.0f) {
                 label += " fighting";
+            }
+            if (!state.profile.empty()) {
+                label += " [" + state.profile + "]";
             }
             result.push_back({ actor->GetPosition(), state.target, state.trailPos, search, std::move(label) });
         }

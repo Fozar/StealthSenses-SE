@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0 — 2026-10-17
+
+- **Different eyes** — NPCs no longer all read a trail the same way. Sense profiles in the new `StealthSensesProfiles.json` set how well each one does by keyword, race, class, faction or NPC. Bosmer (born hunters) notice prints from farther away and make out fainter ones; so do hunters, the Hunters of Hircine, the Skaal, the Forsworn, the Alik'r, the Thalmor, the Dark Brotherhood, the Silver Hand, the Dawnguard and the Vigilants of Stendarr. Falmer are blind to footprints. Who tracks at all is unchanged: NPCs with the vanilla `ActorTypeNPC` keyword. Mods can add their own `StealthSensesProfiles_<Name>.json`.
+- **Night hides footprints** — outdoors, prints are harder to read at night, with a gradual dusk and dawn; indoors a little harder at any hour. Khajiit and vampires see in the dark. New `dark` section.
+- **Alarming tracks** — a werewolf's or a vampire lord's footprints, or bloody ones, make a hostile take up the trail even if it had no reason to be suspicious. Vampires spot a bloody print from twice as far. New options: `tracker.alarm_beast`, `tracker.alarm_blood`.
+- **Removed** — `tracker.humanoids_only`: the profiles do this now (the default profile reads no footprints). The key is ignored if it is still in your config.
+
 ## 0.10.0 — 2026-10-11
 
 - **How you walk** — your footprints depend on you now, not only on the ground, blood, age and weather. A high Sneak skill, sneaking, walking and the Light Foot perk leave fainter prints; sprinting, heavy boots and armor, being over-encumbered and the werewolf or vampire lord form leave deeper ones. Races: Khajiit step lightly everywhere, Bosmer on grass and dirt outdoors, Argonians in mud. A vampire lord leaves no prints while levitating. New `step` section; custom races can be added to the race lists.

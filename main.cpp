@@ -18,6 +18,7 @@
 #include "Config.h"
 #include "Detection.h"
 #include "Overlay.h"
+#include "Profiles.h"
 #include "Serialization.h"
 #include "Telemetry.h"
 #include "ThreadProbe.h"
@@ -260,6 +261,7 @@ namespace {
     void OnDataLoaded() {
         Detection::Verify();
         Trail::Init();
+        Profiles::Load();
         Overlay::Install();
 
         if (auto* footsteps = RE::BGSFootstepManager::GetSingleton()) {

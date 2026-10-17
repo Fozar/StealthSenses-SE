@@ -21,7 +21,9 @@
 namespace StealthSenses::Trail {
     enum Flags : std::uint8_t {
         kNone  = 0,
-        kBlood = 1 << 0,
+        kBlood       = 1 << 0,
+        kBeast       = 1 << 1,  // left by the player as a werewolf (0.11: alarming)
+        kVampireLord = 1 << 2,  // ...as a vampire lord on the ground
     };
 
     struct Footprint {

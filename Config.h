@@ -111,7 +111,8 @@ namespace StealthSenses::Config {
         float       tired_cooldown     = 180.0f;  // no new trail for this long after giving up like that
         float       fight_pause_seconds = 60.0f;  // a tracker fighting someone else (a wolf) keeps the trail this long (0 = drops it)
         bool        require_hostile  = true;
-        bool        humanoids_only   = true;    // only ActorTypeNPC track (no rabbits on the trail)
+        bool        alarm_beast      = true;    // a werewolf or vampire lord footprint is enough, no suspicion needed (0.11)
+        bool        alarm_blood      = true;    // ...and so is a bloody one
         bool        include_combat   = false;
         int         max_trackers     = 4;
         STEALTHSENSES_DEV_SETTING(bool, debug_all_npcs, false, "every High-process NPC tracks (AI obedience test)")
@@ -154,10 +155,26 @@ namespace StealthSenses::Config {
         bool operator==(const DetectionSettings&) const = default;
     };
 
+    // 0.11: darkness makes footprints harder to read, for those without night vision (profile
+    // "night"). Outside it follows the hour: day 0, night 1, ramps at dusk and dawn; inside it is
+    // constant (no daylight; torches and braziers are not measured).
+    struct DarkSettings {
+        bool  enabled       = true;
+        float night_penalty = 0.5f;   // visibility lost in full darkness (profile night 1)
+        float interior      = 0.3f;   // darkness inside
+        float dusk_hour     = 18.0f;  // darkening from here...
+        float night_hour    = 21.0f;  // ...dark from here
+        float dawn_hour     = 5.0f;   // lightening from here...
+        float day_hour      = 7.0f;   // ...light from here
+
+        bool operator==(const DarkSettings&) const = default;
+    };
+
     struct Settings {
         TrailSettings   trail;
         StepSettings    step;
         TrackerSettings tracker;
+        DarkSettings    dark;
         DetectionSettings detection;
         DebugSettings   debug;
 

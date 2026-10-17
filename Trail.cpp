@@ -224,6 +224,10 @@ namespace StealthSenses::Trail {
             fp.flags |= kBlood;
             --g_bloodSteps;
         }
+        // A beast form on the ground: alarming to anyone who sees it (0.11); levitating left none
+        if (stride.beastForm) {
+            fp.flags |= a_player->GetRace() == g_werewolf ? kBeast : kVampireLord;
+        }
 
         g_trail.push_back(fp);
         if (g_trail.size() > static_cast<std::size_t>(cfg.max_footprints)) {
@@ -235,6 +239,7 @@ namespace StealthSenses::Trail {
         Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(pos) },
             { "space", Telemetry::Hex(space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(fp.material)) },
             { "base", Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & kBlood) != 0 },
+            { "beast", (fp.flags & kBeast) != 0 }, { "vlord", (fp.flags & kVampireLord) != 0 },
             { "src", a_source }, { "step", fp.step },
             { "stride", { { "skill", stride.sneakSkill }, { "gait", GaitName(stride.gait) },
                             { "boots", stride.heavyBoots }, { "body", stride.heavyBody },

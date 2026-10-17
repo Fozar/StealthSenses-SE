@@ -1,0 +1,49 @@
+// Stealth Senses — sense profiles: how well an NPC reads the player's footprints.
+//
+// Fields (1 = an ordinary person):
+//   tracking       footprint visibility and the distance it notices one from, times this; 0 = never reads them
+//   tracking_mult  multiplies the tracking the rules below it gave (use it for factions: a Bosmer hunter keeps the Bosmer bonus)
+//   night          how much darkness hurts reading (1 = fully, 0 = sees in the dark)
+//   blood          bloody footprints: visibility and notice distance times this, on top of tracking
+//   blood_mult     multiplies the blood the rules below it gave
+//
+// A rule matches on exactly one of: keyword, race, class, faction, npc — "Plugin.esm|FormID" (hex,
+// without the load order byte). Rules apply in that order (a faction over a race over a keyword),
+// then in file order. "name" shows in the log; "why" is for people and ignored.
+// Other mods can add StealthSensesProfiles_<Name>.json next to this file: read after it, in name order.
+{
+    "default": { "tracking": 0.0 },
+    "rules": [
+        { "keyword": "Skyrim.esm|013794", "name": "person", "tracking": 1.0,
+          "why": "ActorTypeNPC: reading footprints takes a mind. Animals, automatons, draugr and other creatures do not (before 0.11: humanoids_only)" },
+
+        { "race": "Skyrim.esm|0131F4", "name": "falmer", "tracking": 0.0,
+          "why": "Falmer are blind: racial ability AbFalmer = AbBlind 80; 'the snow elves, for time eternal, would be blind' (The Falmer: A Study)" },
+        { "race": "Dawnguard.esm|01AACC", "name": "falmer", "tracking": 0.0,
+          "why": "FalmerFrozenVampRace, as above" },
+
+        { "race": "Skyrim.esm|013749", "name": "bosmer", "tracking": 1.4,
+          "why": "Born hunters and scouts: 'make good scouts... no finer archers in all of Tamriel' (race description), Archery +10, Sneak +5" },
+        { "race": "Skyrim.esm|088884", "name": "bosmer", "tracking": 1.4, "why": "WoodElfRaceVampire, as above" },
+
+        { "race": "Skyrim.esm|013745", "name": "khajiit", "tracking": 1.1, "night": 0.0,
+          "why": "'All Khajiit can see in the dark' (race description), Night Eye; a follower: 'I'll smell them coming'" },
+        { "race": "Skyrim.esm|088845", "name": "khajiit", "tracking": 1.1, "night": 0.0, "why": "KhajiitRaceVampire, as above" },
+
+        { "keyword": "Skyrim.esm|0A82BB", "name": "vampire", "night": 0.0, "blood": 2.0,
+          "why": "Keyword Vampire on every vampire race. 'I knew I smelled mortal blood!' (Dawnguard vampires, alert to combat), 'I can smell your blood!'; VampireHuntersSight (night eye)" },
+
+        { "faction": "Skyrim.esm|04E509", "name": "hunter", "tracking_mult": 1.3, "why": "HunterFaction: hunters live by reading tracks" },
+        { "faction": "Skyrim.esm|0BA53B", "name": "orc hunter", "tracking_mult": 1.3,
+          "why": "DialogueOrcHuntersFaction: stronghold hunters; 'The air has the smell of beasts. The hunt is good today.'" },
+        { "faction": "Skyrim.esm|0955E6", "name": "hunter of Hircine", "tracking_mult": 1.5, "why": "DA05HuntersOfHircineFaction: the Huntsman's own" },
+        { "faction": "Dragonborn.esm|018F9A", "name": "skaal", "tracking_mult": 1.3, "why": "'The Skaal hunt not for sport, but to survive'" },
+        { "faction": "Skyrim.esm|043599", "name": "forsworn", "tracking_mult": 1.3, "why": "Live in the wild mountains of the Reach: 'as wild as wolves'" },
+        { "faction": "Skyrim.esm|0215D3", "name": "alik'r", "tracking_mult": 1.4, "why": "MS08AlikrFaction: tracked Saadia across the province for weeks" },
+        { "faction": "Skyrim.esm|039F26", "name": "thalmor", "tracking_mult": 1.3, "why": "Justiciars hunt dissidents: 'They've been hunting down every Blade they can find'" },
+        { "faction": "Skyrim.esm|01BDB3", "name": "dark brotherhood", "tracking_mult": 1.4, "why": "Assassins: stalking a mark unseen is their trade" },
+        { "faction": "Skyrim.esm|0AA0A4", "name": "silver hand", "tracking_mult": 1.4, "why": "Werewolf hunters" },
+        { "faction": "Dawnguard.esm|003375", "name": "dawnguard", "tracking_mult": 1.4, "why": "DLC1HunterFaction: vampire hunters" },
+        { "faction": "Skyrim.esm|0B3292", "name": "vigilant", "tracking_mult": 1.2, "why": "Vigilants of Stendarr hunt daedra worshippers and the undead" }
+    ]
+}

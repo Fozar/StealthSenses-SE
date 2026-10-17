@@ -160,12 +160,23 @@ namespace StealthSenses::Config {
         Read(jk, "tired_cooldown", k.tired_cooldown);
         Read(jk, "fight_pause_seconds", k.fight_pause_seconds);
         Read(jk, "require_hostile", k.require_hostile);
-        Read(jk, "humanoids_only", k.humanoids_only);
+        Read(jk, "alarm_beast", k.alarm_beast);
+        Read(jk, "alarm_blood", k.alarm_blood);
         Read(jk, "include_combat", k.include_combat);
         Read(jk, "max_trackers", k.max_trackers);
 #ifdef STEALTHSENSES_DEV
         Read(jk, "debug_all_npcs", k.debug_all_npcs);
 #endif
+
+        auto& n = settings.dark;
+        const auto& jn = Section(root, "dark");
+        Read(jn, "enabled", n.enabled);
+        Read(jn, "night_penalty", n.night_penalty);
+        Read(jn, "interior", n.interior);
+        Read(jn, "dusk_hour", n.dusk_hour);
+        Read(jn, "night_hour", n.night_hour);
+        Read(jn, "dawn_hour", n.dawn_hour);
+        Read(jn, "day_hour", n.day_hour);
 
         auto& e = settings.detection;
         const auto& je = Section(root, "detection");
@@ -210,6 +221,14 @@ namespace StealthSenses::Config {
         s.skill_floor = std::clamp(s.skill_floor, 0.0f, 1.0f);
         s.min_mult    = std::max(s.min_mult, 0.0f);
         s.max_mult    = std::max(s.max_mult, s.min_mult);
+        n.night_penalty = std::clamp(n.night_penalty, 0.0f, 1.0f);
+        n.interior      = std::clamp(n.interior, 0.0f, 1.0f);
+        for (float* hour : { &n.dusk_hour, &n.night_hour, &n.dawn_hour, &n.day_hour }) {
+            *hour = std::clamp(*hour, 0.0f, 24.0f);
+        }
+        // Ramps run forward: dusk before night, dawn before day (a zero-length ramp is a step)
+        n.night_hour = std::max(n.night_hour, n.dusk_hour);
+        n.day_hour   = std::max(n.day_hour, n.dawn_hour);
         // A bonus only makes an NPC better at spotting the player, never worse
         e.tracker_bonus     = std::clamp(e.tracker_bonus, 0, 100);
         e.after_fight_bonus = std::clamp(e.after_fight_bonus, 0, 100);

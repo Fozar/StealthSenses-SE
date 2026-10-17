@@ -70,9 +70,19 @@
         "tired_cooldown": 180.0,
         "fight_pause_seconds": 60.0,
         "require_hostile": true,
-        "humanoids_only": true,
+        "alarm_beast": true,
+        "alarm_blood": true,
         "include_combat": false,
         "max_trackers": 4
+    },
+    "dark": {
+        "enabled": true,
+        "night_penalty": 0.5,
+        "interior": 0.3,
+        "dusk_hour": 18.0,
+        "night_hour": 21.0,
+        "dawn_hour": 5.0,
+        "day_hour": 7.0
     },
     "detection": {
         "enabled": true,

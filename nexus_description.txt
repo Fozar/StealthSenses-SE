@@ -5,7 +5,7 @@
 
 No .esp. No scripts. No edited records. Vanilla AI does the walking — the plugin only tells it where to look next, and lets a wary enemy see a little sharper.[/font]
 
-[font=Tahoma][b]Early access (0.10).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
+[font=Tahoma][b]Early access (0.11).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
 
 [font=Tahoma][size=4][b]— Your trail —[/b][/size][/font]
 
@@ -23,11 +23,19 @@ No .esp. No scripts. No edited records. Vanilla AI does the walking — the plug
 
 [font=Tahoma]Not everyone, and not for no reason. An enemy takes up your trail only when:
 [list]
-[*]it has a reason to be suspicious — [b]it lost you in a fight[/b] within the last minute, it [b]almost spotted you[/b], or it is on alert;
+[*]it has a reason to be suspicious — [b]it lost you in a fight[/b] within the last minute, it [b]almost spotted you[/b], or it is on alert — [b]or the prints alarm it[/b]: a werewolf's or a vampire lord's tracks, or blood, put even a calm enemy on your trail;
 [*]one of your footprints is [b]right in front of it[/b] — a few steps away, inside its field of view, not behind a wall;
 [*]it is standing or walking — a sleeping or sitting bandit does not study the floor.
 [/list]
 Only hostile humanoids track. Animals never do (yet).[/font]
+
+[font=Tahoma][size=4][b]— Different eyes —[/b][/size][/font]
+
+[font=Tahoma]Not every enemy reads the ground equally well. [b]Bosmer[/b] notice your prints from farther away and make out fainter ones; so do [b]hunters[/b], the Hunters of Hircine, the Skaal, the Forsworn, the Alik'r, the Thalmor, the [b]Dark Brotherhood[/b], the Silver Hand, the Dawnguard and the Vigilants of Stendarr. The Falmer never look down.
+
+[b]Night[/b] hides your prints outdoors, with a slow dusk and dawn, and a little indoors at any hour — but not from [b]Khajiit[/b] and [b]vampires[/b], who see in the dark. A vampire also spots a bloody print from twice as far.
+
+Who reads how well is set in [font=Courier New]StealthSensesProfiles.json[/font] by race, faction, class, keyword or NPC; other mods can add their own [font=Courier New]StealthSensesProfiles_<Name>.json[/font].[/font]
 
 [font=Tahoma][size=4][b]— Bodies —[/b][/size][/font]
 

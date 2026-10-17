@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(StealthSenses VERSION 0.10.0 LANGUAGES CXX)
+project(StealthSenses VERSION 0.11.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -85,6 +85,8 @@ add_commonlibsse_plugin(StealthSenses
         Config.cpp
         Trail.cpp
         TrailLogic.cpp
+        ProfileLogic.cpp
+        Profiles.cpp
         Trackers.cpp
         Serialization.cpp
         Telemetry.cpp
@@ -138,6 +140,7 @@ target_link_libraries(StealthSenses PRIVATE nlohmann_json::nlohmann_json)
 set(_pkg_plugins "${CMAKE_CURRENT_BINARY_DIR}/_package/SKSE/Plugins")
 file(MAKE_DIRECTORY "${_pkg_plugins}")
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/StealthSensesConfig.json" DESTINATION "${_pkg_plugins}")
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/StealthSensesProfiles.json" DESTINATION "${_pkg_plugins}")
 
 add_custom_command(TARGET StealthSenses POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -146,6 +149,9 @@ add_custom_command(TARGET StealthSenses POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/StealthSensesConfig.json"
         "${_pkg_plugins}/StealthSensesConfig.json"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/StealthSensesProfiles.json"
+        "${_pkg_plugins}/StealthSensesProfiles.json"
     # GPL-3.0 (inherited from CommonLibSSE-NG): the license text ships with the binary
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt"
@@ -154,6 +160,7 @@ add_custom_command(TARGET StealthSenses POST_BUILD
         "${CMAKE_CURRENT_BINARY_DIR}/${_pkg_zip}" --format=zip
         -- "SKSE/Plugins/StealthSenses.dll"
            "SKSE/Plugins/StealthSensesConfig.json"
+           "SKSE/Plugins/StealthSensesProfiles.json"
            "LICENSE.txt"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/_package"
     COMMENT "Packaging ${_pkg_zip}"
@@ -176,7 +183,9 @@ if(STEALTHSENSES_TESTS)
         tests/TrailTests.cpp
         tests/CoSaveTests.cpp
         tests/ConfigTests.cpp
+        tests/ProfileTests.cpp
         TrailLogic.cpp
+        ProfileLogic.cpp
         Config.cpp
     )
     target_include_directories(StealthSensesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -201,6 +210,9 @@ if(STEALTHSENSES_DEPLOY_DIR)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${STEALTHSENSES_DEPLOY_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:StealthSenses>" "${STEALTHSENSES_DEPLOY_DIR}"
+        # The profiles are data, not test settings: they go along
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/StealthSensesProfiles.json" "${STEALTHSENSES_DEPLOY_DIR}"
         COMMENT "Deploying StealthSenses.dll to ${STEALTHSENSES_DEPLOY_DIR}"
     )
 endif()

@@ -25,7 +25,8 @@
 #include "Trackers.h"
 #include "Trail.h"
 
-#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/ostream_sink.h>
+#include <fstream>
 #include <Windows.h>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
@@ -54,7 +55,10 @@ namespace {
                 return std::filesystem::path(buf).parent_path();
             }()) / "StealthSenses.log";
 
-        auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
+        // Through an ofstream, not basic_file_sink: it opens by a narrow name, and path::string() throws
+        // (CTD) when the Documents path has characters outside the ANSI code page
+        static std::ofstream file(logPath, std::ios::out | std::ios::trunc);
+        auto sink = std::make_shared<spdlog::sinks::ostream_sink_mt>(file, true);
         auto log  = std::make_shared<spdlog::logger>("global", std::move(sink));
         log->set_level(spdlog::level::info);
         log->flush_on(spdlog::level::info);

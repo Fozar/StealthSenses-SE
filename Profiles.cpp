@@ -62,10 +62,16 @@ namespace StealthSenses::Profiles {
             return false;
         }
 
+        // UTF-8 for the log: path::string() throws on names outside the ANSI code page
+        std::string DisplayName(const std::filesystem::path& a_path) {
+            const auto u8 = a_path.filename().u8string();
+            return { reinterpret_cast<const char*>(u8.data()), u8.size() };
+        }
+
         void ReadFile(const std::filesystem::path& a_path) {
             std::ifstream file(a_path);
             if (!file) {
-                SKSE::log::warn("Profiles: cannot open {}", a_path.string());
+                SKSE::log::warn("Profiles: cannot open {}", DisplayName(a_path));
                 return;
             }
             const std::string        text{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
@@ -74,13 +80,13 @@ namespace StealthSenses::Profiles {
             try {
                 Parse(text, g_set, warnings);
             } catch (const nlohmann::json::exception& e) {
-                SKSE::log::error("Profiles: {} is not valid JSON, skipped: {}", a_path.filename().string(), e.what());
+                SKSE::log::error("Profiles: {} is not valid JSON, skipped: {}", DisplayName(a_path), e.what());
                 return;
             }
             for (const auto& w : warnings) {
-                SKSE::log::warn("Profiles: {}: {}", a_path.filename().string(), w);
+                SKSE::log::warn("Profiles: {}: {}", DisplayName(a_path), w);
             }
-            SKSE::log::info("Profiles: {} — {} rules", a_path.filename().string(), g_set.rules.size() - before);
+            SKSE::log::info("Profiles: {} — {} rules", DisplayName(a_path), g_set.rules.size() - before);
         }
     }
 
@@ -98,10 +104,13 @@ namespace StealthSenses::Profiles {
         // Other mods' additions after ours, so they override it
         std::vector<std::filesystem::path> extra;
         std::error_code                    ec;
-        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-            const auto name = entry.path().filename().string();
-            if (entry.is_regular_file() && name.starts_with("StealthSensesProfiles_") && name.ends_with(".json")) {
-                extra.push_back(entry.path());
+        // Names are compared as wide strings: path::string() throws on a file name that does not fit the ANSI
+        // code page (a CTD in 0.11.0 with a non-Latin file in Data/SKSE/Plugins); the error_code overloads keep
+        // an unreadable entry from throwing out of the iteration
+        for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+            const auto name = it->path().filename().wstring();
+            if (name.starts_with(L"StealthSensesProfiles_") && name.ends_with(L".json") && it->is_regular_file(ec)) {
+                extra.push_back(it->path());
             }
         }
         std::ranges::sort(extra);

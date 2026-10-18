@@ -68,7 +68,8 @@ namespace StealthSenses::Telemetry {
         }
         g_file.open(g_path, std::ios::out | std::ios::trunc | std::ios::binary);
         g_start = std::chrono::steady_clock::now();
-        SKSE::log::info("Telemetry: writing {}", g_path.string());
+        const auto u8 = g_path.u8string();  // string() throws on a path outside the ANSI code page
+        SKSE::log::info("Telemetry: writing {}", std::string(reinterpret_cast<const char*>(u8.data()), u8.size()));
     }
 
     bool Enabled() {

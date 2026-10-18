@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1 — 2026-10-18
+
+- **Fix** — crash on game start (0.11.0) when `Data/SKSE/Plugins` held a file with a non-Latin name (e.g. Chinese characters) and the game was not run in that language. Same for a Windows user name with such characters, which broke the log file path.
+
 ## 0.11.0 — 2026-10-17
 
 - **Different eyes** — NPCs no longer all read a trail the same way. Sense profiles in the new `StealthSensesProfiles.json` set how well each one does by keyword, race, class, faction or NPC. Bosmer (born hunters) notice prints from farther away and make out fainter ones; so do hunters, the Hunters of Hircine, the Skaal, the Forsworn, the Alik'r, the Thalmor, the Dark Brotherhood, the Silver Hand, the Dawnguard and the Vigilants of Stendarr. Falmer are blind to footprints. Who tracks at all is unchanged: NPCs with the vanilla `ActorTypeNPC` keyword. Mods can add their own `StealthSensesProfiles_<Name>.json`.

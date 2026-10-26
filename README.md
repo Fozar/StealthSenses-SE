@@ -1,10 +1,10 @@
 # StealthSenses SE
 
-An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns your footprints into evidence. Hostile NPCs who have reason to be suspicious can notice the trail you leave, read it, and follow it — bending down to examine a print, losing it on bare rock, casting around to pick it up again, and eventually walking straight into your hiding place.
+An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns your footprints and scent into evidence. Hostile NPCs who have reason to be suspicious can notice the trail you leave, read it, and follow it — bending down to examine a print, losing it on bare rock, casting around to pick it up again, and eventually walking straight into your hiding place. Creatures with the right scent profile can follow your scent even over stone and in darkness.
 
 **Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163 · **Source:** https://github.com/Fozar/StealthSenses-SE
 
-> **Status: early access (0.11.x).** The trail mechanic works and is tested in game on AE 1.7.104. Expect tuning changes; there is no ESP and nothing is baked into your save beyond a small SKSE co-save record. See `CHANGELOG.md`.
+> **Status: early access (0.12.0).** Visual tracking and wolf scent pursuit have been tested in game on AE 1.7.104. Expect tuning changes; there is no ESP. See `CHANGELOG.md`.
 
 ---
 
@@ -14,8 +14,9 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 - **Trackers** — a hostile humanoid with a reason to be suspicious that sees one of your prints in front of it takes up the trail: draws its weapon, follows print to print, bends down to examine one, searches where the trail runs out, and gives up after a while.
 - **Different eyes** — not every enemy reads a trail equally well. Bosmer, hunters, the Forsworn, the Alik'r, the Thalmor, the Dark Brotherhood, the Silver Hand and the Dawnguard notice prints from farther away and make out fainter ones. Darkness hides your prints from most enemies, but not from Khajiit and vampires, and a vampire picks out a bloody print from afar. Falmer are blind to them. The profiles are a JSON file that you or other mods can extend.
 - **Alarming tracks** — a werewolf's or a vampire lord's prints, or bloody ones, alarm even a calm enemy who sees them.
+- **Scent** — selected creatures can investigate your scent trail, including on stone and in darkness. It gradually spreads and weakens with game time; blood strengthens it, and water breaks its chain. Khajiit and Argonians have stronger scent profiles than ordinary people; vampires have an additional advantage on blood. These profiles can be adjusted in JSON.
 - **Bodies** — an enemy that finds the body of one of its own you killed goes to it and looks for your trail from there.
-- **Sharper senses** — a suspicious enemy (on your trail, after a fight with you, or having found a body) spots you sooner: its stealth meter on you reads a few points higher.
+- **Sharper senses** — a suspicious enemy (reading visible tracks, after a fight with you, or having found a body) spots you sooner: its stealth meter on you reads a few points higher. Scent pursuit alone adds no detection bonus.
 - **Vanilla AI stays in charge** — trackers walk with vanilla packages and pathfinding; one that spots you or fights you (or your followers) is handed back to the vanilla AI at once. A fight with someone else — a wolf on the road — only interrupts the chase.
 
 The full description is on the [Nexus page](https://www.nexusmods.com/skyrimspecialedition/mods/194163).
@@ -143,11 +144,26 @@ Outdoors, darkness follows the hour; indoors it is constant (torches are not tak
 | `dusk_hour` / `night_hour` | `18` / `21` | Darkness grows from dusk to night… |
 | `dawn_hour` / `day_hour` | `5` / `7` | …and fades from dawn to day |
 
+### `scent` — scent sources
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Enable scent sources and scent pursuit |
+| `halflife_hours` | `0.5` | Game hours for scent quantity to halve; concentration also falls from dilution |
+| `base_strength` | `1.0` | Initial ordinary scent strength |
+| `blood_bonus` | `1.0` | Added strength for bloody sources |
+| `radius` | `450.0` | Initial reference scent range in game units, modified by NPC profiles |
+| `min_strength` | `0.1` | Minimum perceived scent strength |
+| `spread_max_mult` | `1.25` | Maximum expansion of the reference radius; 1 disables expansion |
+| `spread_hours` | `0.1` | Game hours for expansion to approach its limit (time constant) |
+
 ### Sense profiles — `StealthSensesProfiles.json`
 
 Who reads footprints and how well. A profile has `tracking` (multiplies footprint visibility and the distance a print is noticed from; 0 = never reads them), `night` (how much darkness hurts: 1 = fully, 0 = sees in the dark) and `blood` (an extra multiplier for bloody prints). A rule matches on a `keyword`, `race`, `class`, `faction` or `npc` given as `"Plugin.esp|FormID"`, and rules apply in that order, so a faction overrides a race. `tracking_mult` and `blood_mult` multiply the value set before them instead of replacing it: a Bosmer hunter keeps the Bosmer bonus. Anything no rule matches gets `default`; it is `tracking: 0`, so only NPCs with the vanilla `ActorTypeNPC` keyword read footprints.
 
-Each rule in the file has a `why` field that says where it comes from. Mods can add `StealthSensesProfiles_<Name>.json` next to it instead of editing it; such files are read after it, in name order.
+Scent uses independent fields: `smell` sets its range multiplier (0 disables scent), `smell_blood` adds a range multiplier for bloody sources, `smell_mult` multiplies earlier scent settings, and `smell_hunt` allows a calm enemy to investigate ordinary scent. These fields follow the same rule order. They do not change vanilla hostility.
+
+Rules can include a `why` field explaining their source. Mods can add `StealthSensesProfiles_<Name>.json` next to it instead of editing it; such files are read after it, in name order.
 
 ```json
 { "rules": [ { "faction": "MyMod.esp|000D62", "name": "rangers", "tracking_mult": 1.4 } ] }
@@ -200,11 +216,13 @@ The trace records your position, every nearby NPC's state and every decision the
 ## Known limitations
 
 - Trackers do not speak alert lines of their own.
-- Animals never track (planned together with scent).
+- Scent uses a conservative direct barrier check; spreading around corners is not simulated.
+- Scent comes from recorded ground steps; a continuous scent source from a stationary character is not simulated.
+- Enhanced scent in a werewolf's human form is not yet detected automatically.
 
 ## FAQ
 
-**Who can track me?** Only humanoid NPCs, the ones whose race has the vanilla `ActorTypeNPC` keyword: all playable races (vampire variants included), Dremora and Snow Elves. Dwarven automatons, Falmer, draugr and skeletons, hagravens, spriggans, giants, trolls, rieklings, werewolves, animals, dragons and other daedra never do. Races from mods track if they carry `ActorTypeNPC`, which playable-race mods almost always do. How well each of them reads a trail is set in `StealthSensesProfiles.json`.
+**Who can track me?** Visible footprints are read by NPCs with a nonzero `tracking` profile, normally humanoids with `ActorTypeNPC`. Scent is a separate channel for selected creatures and races with a nonzero `smell` profile. Automatons, ordinary undead, atronachs, gargoyles and other excluded creatures receive no scent sense; vampires and death hounds have explicit exceptions. Dremora and Seekers have no scent profile by default. Both channels can be adjusted in `StealthSensesProfiles.json`.
 
 **Does it work with Footprints, Dynamic Footprints or Dynamic Terrain Deformation?** Yes, alongside them; it replaces nothing. Those mods draw prints you can see; Stealth Senses draws nothing and keeps its own invisible trail for the AI. The two are separate: a print you see is not necessarily one an enemy reads, and on stone, where you see none, a tracker can still make out a faint one up close.
 

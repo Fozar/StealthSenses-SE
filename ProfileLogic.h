@@ -25,6 +25,9 @@ namespace StealthSenses::Profiles {
         float       tracking = 1.0f;  // reads footprints: visibility and notice radius times this; 0 = never
         float       night    = 1.0f;  // share of the darkness penalty it takes; 0 = sees in the dark
         float       blood    = 1.0f;  // bloody footprints: visibility and notice radius times this on top
+        float       smell    = 0.0f;  // scent range, independent of visual tracking; 0 = no scent reader
+        float       smellBlood = 1.0f; // additional scent range for blood
+        bool        smellHunt = false; // may investigate ordinary scent while calm
         std::string name     = "default";  // names of the rules that made it, "+"-joined
 
         bool operator==(const Profile&) const = default;
@@ -32,6 +35,7 @@ namespace StealthSenses::Profiles {
 
     inline constexpr float kMaxTracking = 3.0f;
     inline constexpr float kMaxBlood    = 5.0f;
+    inline constexpr float kMaxSmell    = 4.0f;
 
     // What a rule matches on, least specific first: a later layer overrides an earlier one
     enum class Layer : std::uint8_t { kKeyword, kRace, kClass, kFaction, kNpc };
@@ -45,6 +49,10 @@ namespace StealthSenses::Profiles {
         std::optional<float> blood;
         std::optional<float> trackingMult;
         std::optional<float> bloodMult;
+        std::optional<float> smell;
+        std::optional<float> smellBlood;
+        std::optional<float> smellMult;
+        std::optional<bool>  smellHunt;
 
         void ApplyTo(Profile& a_profile) const;
     };

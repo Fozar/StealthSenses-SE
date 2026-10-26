@@ -19,12 +19,15 @@
 #include "Config.h"
 #include "Telemetry.h"
 #include "TrailLogic.h"
+#include "ScentLogic.h"
+#include <unordered_set>
 
 namespace StealthSenses::Trail {
     namespace {
         std::deque<Footprint> g_trail;
         std::uint32_t         g_nextSeq    = 1;
         int                   g_bloodSteps = 0;
+        Scent::Chain          g_scentChain;
 
         using Clock = std::chrono::steady_clock;
         Clock::time_point g_lastFootstepEvent{};
@@ -166,7 +169,69 @@ namespace StealthSenses::Trail {
         return world ? world->GetFormID() : 0;
     }
 
+    void BreakScent(std::string_view a_reason) {
+        const auto segment = g_scentChain.Current();
+        g_scentChain.Break();
+        if (segment != 0) {
+            Telemetry::Write({ { "type", "scent_break" }, { "segment", segment }, { "reason", a_reason } });
+        }
+    }
+
+    void ObserveContact(RE::PlayerCharacter* a_player) {
+        if (!a_player || !Config::Get().trail.enabled || !Config::Get().scent.enabled) {
+            BreakScent("disabled");
+            return;
+        }
+        const auto space = SpaceOf(a_player);
+        if (space == 0) { BreakScent("no space"); return; }
+        if (a_player->IsOnMount()) { BreakScent("mount"); return; }
+        if (const auto* state = a_player->AsActorState(); state && state->IsSwimming()) {
+            BreakScent("water"); return;
+        }
+        if (g_vampireLord && a_player->GetRace() == g_vampireLord && Levitating(a_player)) {
+            BreakScent("levitation"); return;
+        }
+        if (OnGround(a_player) && SurfaceUnder(a_player) == RE::MATERIAL_ID::kWater) {
+            BreakScent("water"); return;
+        }
+        if (!g_trail.empty() && g_trail.back().space != space) BreakScent("space");
+    }
+
+    namespace {
+        std::vector<std::uint32_t> Sequences() {
+            std::vector<std::uint32_t> result;
+            result.reserve(g_trail.size());
+            for (const auto& fp : g_trail) result.push_back(fp.seq);
+            return result;
+        }
+
+        void TraceRemoved(const std::vector<std::uint32_t>& a_before, std::string_view a_reason) {
+            if (!Telemetry::Enabled() || a_before.size() == g_trail.size()) return;
+            std::unordered_set<std::uint32_t> alive;
+            for (const auto& fp : g_trail) alive.insert(fp.seq);
+            std::vector<std::uint32_t> gone;
+            for (const auto seq : a_before) if (!alive.contains(seq)) gone.push_back(seq);
+            Telemetry::Write({ { "type", "trail_removed" }, { "seqs", gone }, { "reason", a_reason } });
+        }
+
+        void ThinStored() {
+            const auto before = Sequences();
+            Thin(g_trail, Config::Get().trail);
+            TraceRemoved(before, "thin");
+        }
+
+        void StampScent(Footprint& a_fp) {
+            if (!Config::Get().scent.enabled) return;
+            if (!g_trail.empty() && (g_trail.back().space != a_fp.space ||
+                g_trail.back().pos.GetDistance(a_fp.pos) > Config::Get().tracker.gap_distance)) {
+                BreakScent("space or long gap");
+            }
+            a_fp.scentSegment = g_scentChain.Stamp(a_fp.space);
+        }
+    }
+
     void TryRecord(RE::PlayerCharacter* a_player, std::string_view a_source) {
+        ObserveContact(a_player);
         const auto& cfg = Config::Get().trail;
         if (!cfg.enabled || !a_player) {
             return;
@@ -192,6 +257,10 @@ namespace StealthSenses::Trail {
             return;
         }
 
+        // Read water before the minimum spacing gate, including on footstep callbacks.
+        const auto material = SurfaceUnder(a_player);
+        if (material == RE::MATERIAL_ID::kWater) { BreakScent("water"); return; }
+
         const auto pos = a_player->GetPosition();
         if (!g_trail.empty()) {
             const auto& last = g_trail.back();
@@ -202,12 +271,6 @@ namespace StealthSenses::Trail {
 
         const auto* calendar = RE::Calendar::GetSingleton();
         if (!calendar) {
-            return;
-        }
-
-        // Wading through shallow water (not swimming) washes footprints away too
-        const auto material = SurfaceUnder(a_player);
-        if (material == RE::MATERIAL_ID::kWater) {
             return;
         }
 
@@ -229,10 +292,11 @@ namespace StealthSenses::Trail {
             fp.flags |= a_player->GetRace() == g_werewolf ? kBeast : kVampireLord;
         }
 
+        StampScent(fp);
         g_trail.push_back(fp);
         if (g_trail.size() > static_cast<std::size_t>(cfg.max_footprints)) {
             const auto before = g_trail.size();
-            Thin(g_trail, cfg);
+            ThinStored();
             SKSE::log::debug("Trail: thinned {} -> {} footprints", before, g_trail.size());
         }
 
@@ -241,6 +305,9 @@ namespace StealthSenses::Trail {
             { "base", Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & kBlood) != 0 },
             { "beast", (fp.flags & kBeast) != 0 }, { "vlord", (fp.flags & kVampireLord) != 0 },
             { "src", a_source }, { "step", fp.step },
+            { "born", fp.gameHours }, { "segment", fp.scentSegment },
+            { "scentBase", Scent::Strength(fp, fp.gameHours, Config::Get().scent) },
+            { "scent", Telemetry::ScentModel() },
             { "stride", { { "skill", stride.sneakSkill }, { "gait", GaitName(stride.gait) },
                             { "boots", stride.heavyBoots }, { "body", stride.heavyBody },
                             { "over", stride.overEncumbered }, { "lightFoot", stride.lightFoot },
@@ -278,7 +345,9 @@ namespace StealthSenses::Trail {
     }
 
     void Prune(float a_nowHours, float a_minVisibility) {
-        Prune(g_trail, a_nowHours, a_minVisibility, Config::Get().trail);
+        const auto before = Sequences();
+        Prune(g_trail, a_nowHours, a_minVisibility, Config::Get().trail, Config::Get().scent);
+        TraceRemoved(before, "fade");
     }
 
     const Footprint* FindBySeq(std::uint32_t a_seq) {
@@ -292,11 +361,13 @@ namespace StealthSenses::Trail {
     void Clear() {
         g_trail.clear();
         g_bloodSteps = 0;
+        g_scentChain = {};
     }
 
     void Restore(const Footprint& a_fp) {
         auto fp = a_fp;
         fp.seq  = g_nextSeq++;
+        fp.scentSegment = g_scentChain.Restore(fp.scentSegment, fp.space);
         g_trail.push_back(fp);
     }
 
@@ -311,14 +382,18 @@ namespace StealthSenses::Trail {
         fp.gameHours = calendar->GetHoursPassed();
         fp.material  = a_material;
         fp.seq       = g_nextSeq++;
+        StampScent(fp);
         g_trail.push_back(fp);
         const auto& cfg = Config::Get().trail;
         if (g_trail.size() > static_cast<std::size_t>(cfg.max_footprints)) {
-            Thin(g_trail, cfg);
+            ThinStored();
         }
         Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(a_pos) },
             { "space", Telemetry::Hex(a_space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(a_material)) },
-            { "base", Visibility(fp, fp.gameHours, false) }, { "blood", false }, { "src", a_source } });
+            { "base", Visibility(fp, fp.gameHours, false) }, { "blood", false }, { "src", a_source },
+            { "born", fp.gameHours }, { "segment", fp.scentSegment },
+            { "scentBase", Scent::Strength(fp, fp.gameHours, Config::Get().scent) },
+            { "scent", Telemetry::ScentModel() } });
     }
 
     std::string DescribeStep(RE::PlayerCharacter* a_player) {

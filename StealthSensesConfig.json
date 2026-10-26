@@ -1,4 +1,14 @@
 {
+    "scent": {
+        "enabled": true,
+        "halflife_hours": 0.5,
+        "base_strength": 1.0,
+        "blood_bonus": 1.0,
+        "radius": 450.0,
+        "min_strength": 0.1,
+        "spread_max_mult": 1.25,
+        "spread_hours": 0.1
+    },
     "trail": {
         "enabled": true,
         "min_spacing": 64.0,

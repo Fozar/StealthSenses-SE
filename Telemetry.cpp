@@ -121,6 +121,14 @@ namespace StealthSenses::Telemetry {
         return { std::round(a_pos.x), std::round(a_pos.y), std::round(a_pos.z) };
     }
 
+    nlohmann::json ScentModel() {
+        const auto& scent = Config::Get().scent;
+        return { { "v", 2 }, { "enabled", scent.enabled }, { "halflife_hours", scent.halflife_hours },
+            { "base_strength", scent.base_strength }, { "blood_bonus", scent.blood_bonus },
+            { "radius", scent.radius }, { "min_strength", scent.min_strength },
+            { "spread_max_mult", scent.spread_max_mult }, { "spread_hours", scent.spread_hours } };
+    }
+
     std::string Hex(std::uint32_t a_value) {
         return std::format("{:08X}", a_value);
     }

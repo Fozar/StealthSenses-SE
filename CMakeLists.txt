@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(StealthSenses VERSION 0.11.1 LANGUAGES CXX)
+project(StealthSenses VERSION 0.12.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -184,6 +184,7 @@ if(STEALTHSENSES_TESTS)
         tests/CoSaveTests.cpp
         tests/ConfigTests.cpp
         tests/ProfileTests.cpp
+        tests/ScentTests.cpp
         TrailLogic.cpp
         ProfileLogic.cpp
         Config.cpp

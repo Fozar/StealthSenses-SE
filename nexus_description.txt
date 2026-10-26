@@ -1,11 +1,11 @@
 [center][font=Tahoma][size=5][b]STEALTH SENSES[/b][/size]
-[size=3]YOUR FOOTPRINTS ARE EVIDENCE — SKSE PLUGIN[/size][/font][/center]
+[size=3]YOUR FOOTPRINTS AND SCENT ARE EVIDENCE — SKSE PLUGIN[/size][/font][/center]
 
 [font=Tahoma]In vanilla Skyrim a bandit who loses sight of you forgets you were ever there. Stealth Senses gives the world a memory of where you walked. Every step you take leaves a footprint, and a suspicious enemy who comes across your trail will read it — bend down to look at a print, follow it from one to the next, lose it on bare rock, cast around to pick it up again, and walk right up to the bush you are hiding in.
 
 No .esp. No scripts. No edited records. Vanilla AI does the walking — the plugin only tells it where to look next, and lets a wary enemy see a little sharper.[/font]
 
-[font=Tahoma][b]Early access (0.11).[/b] The mechanic works and has been tested in game, but expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
+[font=Tahoma][b]Early access (0.12).[/b] Visual tracking and wolf scent pursuit have been tested in game on AE 1.7.104. Expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
 
 [font=Tahoma][size=4][b]— Your trail —[/b][/size][/font]
 
@@ -19,7 +19,7 @@ No .esp. No scripts. No edited records. Vanilla AI does the walking — the plug
 [*][b]Saved with your game[/b] — come back later and your old trail is still there (until it fades).
 [/list][/font]
 
-[font=Tahoma][size=4][b]— Who tracks you —[/b][/size][/font]
+[font=Tahoma][size=4][b]— Who reads your footprints —[/b][/size][/font]
 
 [font=Tahoma]Not everyone, and not for no reason. An enemy takes up your trail only when:
 [list]
@@ -27,7 +27,7 @@ No .esp. No scripts. No edited records. Vanilla AI does the walking — the plug
 [*]one of your footprints is [b]right in front of it[/b] — a few steps away, inside its field of view, not behind a wall;
 [*]it is standing or walking — a sleeping or sitting bandit does not study the floor.
 [/list]
-Only hostile humanoids track. Animals never do (yet).[/font]
+Hostile humanoids read visible footprints. Creatures with a scent profile can follow a separate scent trail, described below.[/font]
 
 [font=Tahoma][size=4][b]— Different eyes —[/b][/size][/font]
 
@@ -37,15 +37,25 @@ Only hostile humanoids track. Animals never do (yet).[/font]
 
 Who reads how well is set in [font=Courier New]StealthSensesProfiles.json[/font] by race, faction, class, keyword or NPC; other mods can add their own [font=Courier New]StealthSensesProfiles_<Name>.json[/font].[/font]
 
+[font=Tahoma][size=4][b]— Scent —[/b][/size][/font]
+
+[font=Tahoma]Wolves and other scent trackers can follow where you walked even over stone and in darkness. They investigate the trail you left behind; once they detect you, vanilla AI takes over.
+
+[b]Scent gradually spreads and weakens[/b] with game time. Water breaks the chain. [b]Blood strengthens the source for every creature that can smell it[/b], and vampires have an additional advantage on blood.
+
+Each creature has its own scent sensitivity. Ordinary people have only a small scent influence; Khajiit and Argonians have stronger profiles. A strong nose does not automatically make a calm creature hunt you. Automatons, ordinary undead, atronachs and gargoyles have no scent sense; vampires and death hounds are explicit exceptions. These profiles are adjustable in [font=Courier New]StealthSensesProfiles.json[/font].
+
+Your scent trail is saved with its original age. [b]Following scent alone adds no bonus to the stealth meter.[/b][/font]
+
 [font=Tahoma][size=4][b]— Bodies —[/b][/size][/font]
 
 [font=Tahoma]Leave a body where its friends will find it, and they come looking for you. A bandit who finds a fellow bandit you killed — sees the body, or heard the kill and has finished its vanilla search — walks over to it, looks around and searches the area, and takes up your trail if it is there. A dead mudcrab, a comrade killed by wolves or a day-old body sends no one after you.[/font]
 
 [font=Tahoma][size=4][b]— Sharper senses —[/b][/size][/font]
 
-[font=Tahoma]An enemy with a reason to be wary sees you a little sooner: one on your trail, one that just lost you in a fight, one that found a body. Its stealth meter on you reads a few points higher — enough to matter when you creep past, not enough to make sneaking pointless. In a fight nothing changes: the vanilla search after an arrow from the shadows is as easy to slip as ever. The bonuses are in the config ([font=Courier New]detection[/font] section) and can be turned off.[/font]
+[font=Tahoma]An enemy with a reason to be wary sees you a little sooner: one reading your visible prints, one that just lost you in a fight, one that found a body. Its stealth meter on you reads a few points higher — enough to matter when you creep past, not enough to make sneaking pointless. In a fight nothing changes: the vanilla search after an arrow from the shadows is as easy to slip as ever. The bonuses are in the config ([font=Courier New]detection[/font] section) and can be turned off.[/font]
 
-[font=Tahoma][size=4][b]— What a tracker does —[/b][/size][/font]
+[font=Tahoma][size=4][b]— What a footprint tracker does —[/b][/size][/font]
 
 [font=Tahoma][list]
 [*][b]Draws its weapon[/b] and goes on alert.
@@ -90,7 +100,8 @@ Skyrim VR is not supported.[/font]
 
 [font=Tahoma][list]
 [*]Trackers do not voice alert lines of their own.
-[*]Animals do not track — planned together with scent.
+[*]Scent comes from recorded ground steps, with a direct barrier check; continuous body odor and spreading around corners are not simulated.
+[*]Enhanced scent in a werewolf's human form is not yet detected automatically.
 [/list][/font]
 
 [font=Tahoma][size=4][b]— Reporting a bug —[/b][/size][/font]

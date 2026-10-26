@@ -31,6 +31,7 @@
   .log { font: 12px/1.35 ui-monospace, monospace; white-space: pre-wrap; margin: 0; }
   .log .now { background: color-mix(in srgb, var(--mark) 15%, transparent); }
   .muted { color: var(--muted); }
+  #windinfo, #scentinfo { white-space: pre-line; font-size: 12px; }
   .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
   button, select, input[type=file] { font: inherit; }
 </style>
@@ -42,7 +43,10 @@
   <label>Сессия <select id="session"></select></label>
   <label><input type="checkbox" id="trails" checked> пути NPC</label>
   <label><input type="checkbox" id="allfp"> все следы</label>
+  <label>Канал <select id="channel"><option value="visual">следы</option><option value="scent">запах</option><option value="both" selected>оба</option></select></label>
+  <label><input type="checkbox" id="scentrings" checked> радиусы запаха</label>
   <label title="Точка, которую расчёт обнаружения вернул для NPC (dv.pos), если она не у игрока — dev-сборка"><input type="checkbox" id="dvpos"> точки обнаружения</label>
+  <label id="windcontrol"><input type="checkbox" id="wind"> архивная проба ветра</label>
   <span class="muted" id="info">Открой StealthSenses.trace.jsonl (Documents/My Games/Skyrim Special Edition/SKSE)</span>
 </header>
 <div id="timebar">
@@ -54,8 +58,12 @@
 <main>
   <canvas id="map"></canvas>
   <aside>
+    <h2>Источники запаха</h2>
+    <div id="scentinfo" class="muted">В этой записи нет данных запаха.</div>
+    <h2 id="windheading">Ветер · архивная dev-проба</h2>
+    <div id="windinfo" class="muted">В этой записи нет данных ветра.</div>
     <h2>NPC в этот момент</h2>
-    <table id="npcs"><thead><tr><th></th><th>NPC</th><th>метр</th><th>режим</th><th>пакет</th></tr></thead><tbody></tbody></table>
+    <table id="npcs"><thead><tr><th></th><th>NPC / профиль</th><th>метр</th><th>канал / режим</th><th>пакет</th></tr></thead><tbody></tbody></table>
     <h2>Метки</h2>
     <div id="marks" class="muted">—</div>
     <h2>События (±15 с)</h2>
@@ -88,12 +96,38 @@ function parse(text) {
   sessions.forEach((s, i) => {
     s.t0 = s.records[0].t; s.t1 = s.records[s.records.length - 1].t;
     s.players = s.records.filter(r => r.type === 'player');
+    s.clocks = s.records.filter(r => Number.isFinite(r.gh));
+    s.scentModels = s.records.filter(r => (r.type === 'load' || r.type === 'footprint') && r.scent);
+    s.removed = new Map();
+    for (const r of s.records) if (r.type === 'trail_removed' && Array.isArray(r.seqs)) {
+      for (const seq of r.seqs) if (!s.removed.has(seq)) s.removed.set(seq, r.t);
+    }
+    s.winds = s.records.filter(r => r.type === 'wind' && r.v === 1);
     s.npcs = new Map();
+    s.scentNotices = new Map();
+    for (const r of s.records) if (r.type === 'scent_notice') {
+      if (!s.scentNotices.has(r.id)) s.scentNotices.set(r.id, []);
+      s.scentNotices.get(r.id).push(r);
+    }
     for (const r of s.records.filter(r => r.type === 'npc')) {
       if (!s.npcs.has(r.id)) s.npcs.set(r.id, { name: r.name, color: palette[s.npcs.size % palette.length], pts: [] });
       s.npcs.get(r.id).pts.push(r);
     }
     s.logs = s.records.filter(r => r.type === 'log' || r.type === 'mark');
+    for (const r of s.records) if (r.type === 'scent_break') {
+      s.logs.push({ t: r.t, type: 'log', text: `Разрыв запаха · участок ${r.segment}: ${r.reason}` });
+    }
+    for (const r of s.records) if (r.type === 'track_target') {
+      s.logs.push({ t: r.t, type: 'log', text: `Цель ${r.id} · ${r.channel === 'scent' ? 'запах' : 'зрение'} · #${r.seq} · участок ${r.segment}` });
+    }
+    let previousWind = null;
+    for (const w of s.winds) {
+      if (previousWind && (w.current?.id !== previousWind.current?.id || w.exterior !== previousWind.exterior || w.space !== previousWind.space)) {
+        s.logs.push({ t: w.t, type: 'log', text: `Ветер: ${previousWind.current?.id ?? '—'} → ${w.current?.id ?? '—'}; ${w.exterior ? 'снаружи' : 'интерьер'}; пространство ${w.space}` });
+      }
+      previousWind = w;
+    }
+    s.logs.sort((a, b) => a.t - b.t);
     s.marks = s.records.filter(r => r.type === 'mark');
     const tracked = [...s.npcs.values()].filter(n => n.pts.some(p => p.track)).length;
     s.label = `#${i + 1}: ${Math.round(s.t1 - s.t0)} с, NPC ${s.npcs.size}, следопытов ${tracked}, меток ${s.marks.length}`;
@@ -111,6 +145,7 @@ function pick(i) {
   range.min = S.t0; range.max = S.t1; T = S.t0; range.value = T;
   fit();
   document.getElementById('info').textContent = `${S.records.length} записей`;
+  for (const id of ['windheading', 'windinfo', 'windcontrol']) document.getElementById(id).hidden = S.winds.length === 0;
   document.getElementById('marks').innerHTML = S.marks.length
     ? S.marks.map(m => `<button data-t="${m.t}">Метка ${m.n} · ${fmt(m.t - S.t0)}</button>`).join(' ')
     : '—';
@@ -119,10 +154,12 @@ function pick(i) {
 }
 
 function fit() {
-  const pts = [...S.players.map(p => p.pos), ...[...S.npcs.values()].flatMap(n => n.pts.map(p => p.pos))];
+  const pts = [...S.players.map(p => p.pos), ...S.winds.filter(w => Array.isArray(w.pos)).map(w => w.pos),
+    ...[...S.footprints.values()].map(fp => fp.pos), ...[...S.npcs.values()].flatMap(n => n.pts.map(p => p.pos))];
   if (!pts.length) return;
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < xs.length; ++i) { minX = Math.min(minX, xs[i]); maxX = Math.max(maxX, xs[i]); minY = Math.min(minY, ys[i]); maxY = Math.max(maxY, ys[i]); }
   view.cx = (minX + maxX) / 2; view.cy = (minY + maxY) / 2;
   const r = cv.getBoundingClientRect();
   view.scale = Math.min(r.width / Math.max(maxX - minX, 500), r.height / Math.max(maxY - minY, 500)) * 0.85;
@@ -137,6 +174,149 @@ function at(list, t) { // last record with r.t <= t
   return best;
 }
 
+// Never use a future wind sample, or keep an outdoor arrow alive after moving indoors.
+function windAt(samples, t, space) {
+  const w = at(samples, t);
+  if (!w) return { sample: null, reason: 'Нет замера ветра к этому моменту.' };
+  const age = t - w.t;
+  const maxAge = Math.max(3, Number.isFinite(w.intervalMs) ? w.intervalMs / 500 : 3);
+  let reason = '';
+  if (age > maxAge) reason = 'Замер устарел; стрелка скрыта.';
+  else if (space && w.space !== space) reason = 'Замер из другого пространства; стрелка скрыта.';
+  else if (!w.exterior) reason = 'Интерьер: наружный ветер не применяется.';
+  else if (!w.sky || !Number.isFinite(w.angle) || !Number.isFinite(w.speed)) reason = 'Нет корректного замера Sky; стрелка скрыта.';
+  else if (w.speed <= 0) reason = 'Штиль: стрелка скрыта.';
+  // AE 1.7.104 RE: Sky angle is radians; engine particle velocity is +cos(a), +sin(a).
+  // Derive from raw v1 samples as well, so the first diagnostic traces remain useful.
+  return { sample: w, age, reason, direction: reason ? null : [Math.cos(w.angle), Math.sin(w.angle)] };
+}
+
+function scentAt(fp, cfg, gameHours, time, removedAt = Infinity) {
+  if (!cfg || ![1, 2].includes(cfg.v) || !cfg.enabled || fp.t > time || removedAt <= time ||
+      !Number.isFinite(fp.segment) || fp.segment <= 0 || !Number.isFinite(fp.born) ||
+      !Number.isFinite(gameHours) || !Number.isFinite(fp.scentBase) || fp.scentBase < 0 ||
+      !Number.isFinite(cfg.halflife_hours) || cfg.halflife_hours <= 0 ||
+      !Number.isFinite(cfg.min_strength) || cfg.min_strength <= 0 || !Number.isFinite(cfg.radius) || cfg.radius <= 0) return null;
+  const age = Math.max(gameHours - fp.born, 0);
+  let growth = 1;
+  if (cfg.v === 2) {
+    if (!Number.isFinite(cfg.spread_max_mult) || cfg.spread_max_mult < 1 || cfg.spread_max_mult > 2 ||
+        !Number.isFinite(cfg.spread_hours) || cfg.spread_hours <= 0) return null;
+    growth += (cfg.spread_max_mult - 1) * -Math.expm1(-age / cfg.spread_hours);
+  }
+  const strength = fp.scentBase * 2 ** (-age / cfg.halflife_hours) / (growth * growth);
+  const spreadRadius = cfg.radius * growth;
+  const radius = strength > cfg.min_strength ? spreadRadius * (1 - cfg.min_strength / strength) : 0;
+  return { fp, age, strength, radius, spreadRadius, active: strength >= cfg.min_strength };
+}
+
+function scentSources(session, time, space) {
+  const gh = at(session.clocks, time)?.gh;
+  const cfg = scentModelAt(session, time);
+  const result = [];
+  for (const fp of session.footprints.values()) {
+    if (space && fp.space !== space) continue;
+    const s = scentAt(fp, fp.scent || cfg, gh, time, session.removed.get(fp.seq));
+    if (s) result.push(s);
+  }
+  return result;
+}
+
+function scentModelAt(session, time) {
+  return at(session.scentModels, time)?.scent;
+}
+
+function scentConnected(a, b) {
+  return a.segment > 0 && a.segment === b.segment && a.space === b.space;
+}
+
+function drawScent(player, space, visible) {
+  const sources = scentSources(S, T, space), active = sources.filter(s => s.active);
+  const cfg = scentModelAt(S, T), panel = document.getElementById('scentinfo');
+  if (!cfg) { panel.textContent = 'В этой записи нет модели запаха. Старым следам запах не назначается.'; return; }
+  const segments = new Set(active.map(s => s.fp.segment));
+  const strongest = active.length ? Math.max(...active.map(s => s.strength)) : 0;
+  panel.textContent = `${cfg.enabled ? 'Включён' : 'Выключен'} · активных источников ${active.length} · участков ${segments.size}\n` +
+    `Максимальная сила ${strongest.toFixed(2)} · полураспад количества ${cfg.halflife_hours} игрового часа\n` +
+    `Модель v${cfg.v} · начальный радиус ${cfg.radius} · порог ${cfg.min_strength}\n` +
+    (cfg.v === 2 ? `Рассеивание до ×${cfg.spread_max_mult}, время ${cfg.spread_hours} игрового часа; сила дополнительно падает от разбавления.\n` : 'Архивная модель без расширения области.\n') +
+    'Бирюзовый — запах, красная обводка — кровь. Радиусы показывают потенциальную область в открытом месте.\n' +
+    'Бледный контур — область рассеивания ×1; яркий — достаточная концентрация ×1, до препятствий. Профили NPC — ниже. Ветра нет.\n' +
+    'Кольца: до 24 источников с отступом. Последние источники:\n' +
+    active.slice().sort((a, b) => b.fp.seq - a.fp.seq).slice(0, 8).map(s =>
+      `#${s.fp.seq} · участок ${s.fp.segment} · S ${s.strength.toFixed(2)} · возраст ${s.age.toFixed(2)} ч · область ${s.spreadRadius.toFixed(0)} · порог ${s.radius.toFixed(0)}`).join('\n');
+  if (!visible) return;
+  const dpr = devicePixelRatio;
+  const bySeq = active.slice().sort((a, b) => a.fp.seq - b.fp.seq);
+  let previous = null;
+  const labels = [];
+  for (const s of bySeq) {
+    if (previous && scentConnected(previous.fp, s.fp) && Math.hypot(s.fp.pos[0] - previous.fp.pos[0], s.fp.pos[1] - previous.fp.pos[1]) <= 400) {
+      path([previous.fp.pos, s.fp.pos], '#17bebb', 1.5);
+    }
+    previous = s;
+    const screen = toScreen(s.fp.pos);
+    const showLabel = view.scale > 0.12 && !labels.some(p => Math.abs(p[0] - screen[0]) < 230 * dpr && Math.abs(p[1] - screen[1]) < 35 * dpr);
+    if (showLabel) labels.push(screen);
+    dot(s.fp.pos, '#17bebb', 3.5, showLabel ? `#${s.fp.seq} S${s.strength.toFixed(2)} · ${s.age.toFixed(2)}h · участок ${s.fp.segment}` : '');
+    if (s.fp.blood) {
+      const [x, y] = toScreen(s.fp.pos);
+      ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath(); ctx.arc(x, y, 5 * dpr, 0, 7); ctx.stroke();
+    }
+  }
+  if (document.getElementById('scentrings').checked) {
+    const center = player?.pos || [view.cx, view.cy];
+    const ordered = active.slice().sort((a, b) => Math.hypot(a.fp.pos[0] - center[0], a.fp.pos[1] - center[1]) - Math.hypot(b.fp.pos[0] - center[0], b.fp.pos[1] - center[1]));
+    const nearest = [], spacing = Math.max(100, Math.min(250, cfg.radius * 0.45));
+    for (const s of ordered) {
+      if (nearest.length === 24) break;
+      if (nearest.some(p => Math.hypot(p.fp.pos[0] - s.fp.pos[0], p.fp.pos[1] - s.fp.pos[1]) < spacing)) continue;
+      nearest.push(s);
+    }
+    ctx.lineWidth = dpr;
+    for (const s of nearest) {
+      const [x, y] = toScreen(s.fp.pos);
+      const fade = Math.max(0, Math.min(1, s.strength / Math.max(cfg.base_strength ?? 1, 0.1)));
+      ctx.strokeStyle = `rgba(23,190,187,${0.32 * fade})`;
+      ctx.beginPath(); ctx.arc(x, y, s.spreadRadius * view.scale * dpr, 0, 7); ctx.stroke();
+      ctx.strokeStyle = `rgba(100,255,230,${0.75 * fade})`;
+      ctx.beginPath(); ctx.arc(x, y, s.radius * view.scale * dpr, 0, 7); ctx.stroke();
+    }
+  }
+}
+
+function drawWind(player, space) {
+  const probe = windAt(S.winds, T, space), w = probe.sample;
+  const panel = document.getElementById('windinfo');
+  if (!w) { panel.textContent = S.winds.length ? probe.reason : 'В этой записи нет данных ветра (старый трейс или не dev-сборка).'; return; }
+  const n = (v, places = 5) => Number.isFinite(v) ? v.toFixed(places) : '—';
+  const weather = v => v && v.id !== '00000000'
+    ? `${v.id}: speed byte ${v.speedByte}; направление ${n(v.directionByte * 360 / 255, 2)}°, отклонение ±${n(v.rangeByte * 90 / 255, 2)}°` : 'нет';
+  panel.textContent = [
+    `Замер ${fmt(w.t - S.t0)} (${n(probe.age, 1)} с назад), ${w.exterior ? 'снаружи' : 'интерьер'}`,
+    w.sky ? `Sky: ${n(w.angle, 6)} рад (${n(w.angle * 180 / Math.PI, 2)}°), скорость ${n(w.speed, 6)}, переход ${n(w.transition, 4)}` : 'Sky недоступен',
+    `Текущая погода: ${weather(w.current)}`, `Предыдущая: ${weather(w.previous)}`,
+    `Деревья XY: (${n(w.treeVector?.[0])}, ${n(w.treeVector?.[1])}), сила ${n(w.treeMagnitude)}`,
+    w.precipitation && Array.isArray(w.precipDirection) ? `Осадки XYZ: (${w.precipDirection.map(v => n(v)).join(', ')})` : '',
+    probe.reason || `Ветер КУДА: XY (${probe.direction.map(v => n(v)).join(', ')}); стрелка условной длины.`,
+    'Направление по Sky и осям частиц AE 1.7.104: 0 = +X, π/2 = +Y. Скорость нормированная.'
+  ].join('\n');
+  if (!probe.direction || !document.getElementById('wind').checked) return;
+  const origin = player?.pos || w.pos;
+  if (!Array.isArray(origin) || !origin.every(Number.isFinite)) return;
+  const [x, y] = toScreen(origin), dpr = devicePixelRatio;
+  const [dx, dy] = [probe.direction[0], -probe.direction[1]];
+  const bx = x + dx * 75 * dpr, by = y + dy * 75 * dpr;
+  ctx.strokeStyle = '#17bebb'; ctx.lineWidth = 3 * dpr;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(bx, by);
+  ctx.moveTo(bx - (dx * 12 + dy * 6) * dpr, by - (dy * 12 - dx * 6) * dpr);
+  ctx.lineTo(bx, by);
+  ctx.lineTo(bx - (dx * 12 - dy * 6) * dpr, by - (dy * 12 + dx * 6) * dpr); ctx.stroke();
+  ctx.fillStyle = css('--text'); ctx.font = `${11 * dpr}px system-ui`;
+  ctx.fillText('ветер КУДА (Sky)', bx + 8 * dpr, by - 6 * dpr);
+}
+
 function render() {
   const r = cv.getBoundingClientRect();
   cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
@@ -145,6 +325,8 @@ function render() {
   const dpr = devicePixelRatio;
   const player = at(S.players, T);
   const space = player ? player.space : null;
+  const channel = document.getElementById('channel').value;
+  const showVisual = channel !== 'scent', showScent = channel !== 'visual';
 
   // Grid every 500 units (~7 m)
   ctx.strokeStyle = css('--grid'); ctx.lineWidth = 1;
@@ -158,6 +340,7 @@ function render() {
   // Footprints: those recorded up to T (or all), alpha = base visibility
   const showAll = document.getElementById('allfp').checked;
   for (const fp of S.footprints.values()) {
+    if (!showVisual) break;
     if (space && fp.space !== space) continue;
     if (!showAll && fp.t > T) continue;
     const [x, y] = toScreen(fp.pos);
@@ -166,10 +349,12 @@ function render() {
     ctx.beginPath(); ctx.arc(x, y, 2.2 * dpr, 0, 7); ctx.fill();
   }
   ctx.globalAlpha = 1;
+  drawScent(player, space, showScent);
 
   // Player path
   path(S.players.filter(p => p.t <= T).map(p => p.pos), css('--player'), 2);
   if (player) dot(player.pos, css('--player'), player.sneak ? 5 : 7, player.sneak ? 'крадётся' : '');
+  drawWind(player, space);
 
   // NPCs
   const rows = [];
@@ -177,7 +362,8 @@ function render() {
     const cur = at(n.pts, T);
     if (!cur || T - cur.t > 3) continue; // left the High process
     if (document.getElementById('trails').checked) path(n.pts.filter(p => p.t <= T && p.track).map(p => p.pos), n.color, 1.5);
-    const mode = cur.track ? (MODES[cur.track.mode] || cur.track.mode) : '';
+    const channelName = cur.track?.channel === 'scent' ? 'запах' : 'зрение';
+    const mode = cur.track ? `${channelName} · ${MODES[cur.track.mode] || cur.track.mode}${cur.track.channel === 'scent' ? ' · участок ' + cur.track.segment : ''}` : '';
     if (cur.track) {
       const [ax, ay] = toScreen(cur.pos), [bx, by] = toScreen(cur.track.target);
       // Search area around the last footprint (0.4.0+: modes hop/look; older traces: "search")
@@ -198,7 +384,13 @@ function render() {
       ctx.beginPath(); ctx.moveTo(px - s, py - s); ctx.lineTo(px + s, py + s); ctx.moveTo(px + s, py - s); ctx.lineTo(px - s, py + s); ctx.stroke();
     }
     dot(cur.pos, n.color, cur.track ? 6 : 4, cur.track ? `${n.name}: ${mode} #${cur.track.seq}` : '');
-    rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.weapon ? ' · оружие' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}${cur.afterFight ? ' · после боя' : ''}${cur.foundBody ? ' · нашёл тело' : ''}</div></td><td title="${esc(meterInfo(cur))}">${cur.meter}${cur.bonus ? ' <span class="muted">+' + cur.bonus + '</span>' : ''}</td><td>${cur.track ? mode + ' #' + cur.track.seq + (cur.track.hops ? ' · точка ' + cur.track.hops : '') : '—'}</td><td class="muted">${cur.pkg}</td></tr>`);
+    const profile = Number.isFinite(cur.prof?.smell) ?
+      `<div class="muted">${esc(cur.prof.name)} · нюх ${cur.prof.smell.toFixed(2)} · кровь ×${Number(cur.prof.smellBlood ?? 1).toFixed(2)} · спокойный поиск ${cur.prof.smellHunt ? 'да' : 'нет'}</div>` : '';
+    const notice = at(S.scentNotices.get(id) || [], T);
+    const reason = { picked: 'доступен источник', barrier_or_budget: 'преграда / предел лучей', calm: 'спокоен',
+      no_local_source: 'нет доступного источника', disabled: 'выключено', no_sense: 'нет нюха' };
+    const decision = notice && T - notice.t <= 3 ? `<div class="muted">запах: ${esc(reason[notice.reason] || notice.reason)}${notice.picked ? ' #' + notice.picked + ' · S' + Number(notice.perceived).toFixed(3) : ''}</div>` : '';
+    rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.weapon ? ' · оружие' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}${cur.afterFight ? ' · после боя' : ''}${cur.foundBody ? ' · нашёл тело' : ''}</div>${profile}</td><td title="${esc(meterInfo(cur))}">${cur.meter}${cur.bonus ? ' <span class="muted">+' + cur.bonus + '</span>' : ''}</td><td>${cur.track ? esc(mode) + ' #' + cur.track.seq + (cur.track.hops ? ' · точка ' + cur.track.hops : '') : '—'}${decision}</td><td class="muted">${cur.pkg}</td></tr>`);
   }
   document.querySelector('#npcs tbody').innerHTML = rows.join('') || '<tr><td colspan="5" class="muted">нет</td></tr>';
 
@@ -240,6 +432,9 @@ document.getElementById('time').oninput = e => seek(+e.target.value);
 document.getElementById('trails').onchange = render;
 document.getElementById('dvpos').onchange = render;
 document.getElementById('allfp').onchange = render;
+document.getElementById('wind').onchange = render;
+document.getElementById('channel').onchange = render;
+document.getElementById('scentrings').onchange = render;
 document.getElementById('play').onclick = () => {
   playing = !playing; document.getElementById('play').textContent = playing ? '❚❚' : '▶';
   let last = performance.now();

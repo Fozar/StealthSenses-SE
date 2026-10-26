@@ -19,6 +19,7 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
     const auto        shipped = Config::Parse(text);
     const Config::Settings defaults;
     CHECK(shipped.trail == defaults.trail);
+    CHECK(shipped.scent == defaults.scent);
     CHECK(shipped.step == defaults.step);
     CHECK(shipped.tracker == defaults.tracker);
     CHECK(shipped.dark == defaults.dark);
@@ -27,6 +28,9 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
 
     // ...and has every key the parser knows, so players see all of them
     const auto root = nlohmann::json::parse(text, nullptr, true, true);
+    for (const char* key : { "enabled", "halflife_hours", "base_strength", "blood_bonus", "radius", "min_strength", "spread_max_mult", "spread_hours" }) {
+        CHECK_MESSAGE(root["scent"].contains(key), key);
+    }
     for (const char* key : { "min_spacing", "max_footprints", "thin_spacing", "halflife_hours" }) {
         CHECK_MESSAGE(root["trail"].contains(key), key);
     }
@@ -65,6 +69,19 @@ TEST_CASE("config: comments are allowed") {
         "tracker": { "max_trackers": 2 /* fewer */ }
     })");
     CHECK(s.tracker.max_trackers == 2);
+}
+
+TEST_CASE("config: scent values stay finite and usable, bad types keep defaults") {
+    const auto s = Config::Parse(R"({"scent": {"enabled": false, "halflife_hours": 0, "base_strength": -2,
+        "blood_bonus": "bad", "radius": 1e100, "min_strength": 0, "spread_max_mult": -1, "spread_hours": 0}})");
+    CHECK_FALSE(s.scent.enabled);
+    CHECK(s.scent.halflife_hours == 0.01f);
+    CHECK(s.scent.base_strength == 0.0f);
+    CHECK(s.scent.blood_bonus == 1.0f);
+    CHECK(s.scent.radius == 450.0f);
+    CHECK(s.scent.min_strength == 0.001f);
+    CHECK(s.scent.spread_max_mult == 1.0f);
+    CHECK(s.scent.spread_hours == 0.001f);
 }
 
 TEST_CASE("config: values that would break the loops are clamped") {

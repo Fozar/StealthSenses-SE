@@ -15,6 +15,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "TrailLogic.h"
+#include "ScentLogic.h"
 
 namespace StealthSenses::Trail {
     namespace {
@@ -115,12 +116,14 @@ namespace StealthSenses::Trail {
         return base * std::exp2(-age / halflife);
     }
 
-    void Prune(std::deque<Footprint>& a_trail, float a_nowHours, float a_minVisibility, const Config::TrailSettings& a_cfg) {
+    void Prune(std::deque<Footprint>& a_trail, float a_nowHours, float a_minVisibility, const Config::TrailSettings& a_cfg,
+        const Config::ScentSettings& a_scent) {
         // Bad weather lowers visibility only for now; the clear-weather value is the most a
         // footprint will ever show. Before 0.7.2 footprints stayed for ten halflives (~1 h of real
         // time) and filled max_footprints long after they faded.
         std::erase_if(a_trail, [&](const Footprint& a_fp) {
-            return Visibility(a_fp, a_nowHours, false, a_cfg) < a_minVisibility;
+            return Visibility(a_fp, a_nowHours, false, a_cfg) < a_minVisibility &&
+                Scent::Strength(a_fp, a_nowHours, a_scent) < a_scent.min_strength;
         });
     }
 
@@ -136,7 +139,9 @@ namespace StealthSenses::Trail {
         for (std::size_t i = 0; i < a_trail.size(); ++i) {
             const auto& fp = a_trail[i];
             // The last footprint of the older half stays so the thinned part joins the rest
-            const bool keep = i + 1 >= half || !kept || kept->space != fp.space ||
+            const bool boundary = (i > 0 && a_trail[i - 1].scentSegment != fp.scentSegment) ||
+                (i + 1 < a_trail.size() && a_trail[i + 1].scentSegment != fp.scentSegment);
+            const bool keep = boundary || i + 1 >= half || !kept || kept->space != fp.space ||
                               kept->pos.GetDistance(fp.pos) >= a_cfg.thin_spacing;
             if (keep) {
                 thinned.push_back(fp);

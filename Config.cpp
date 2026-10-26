@@ -86,6 +86,28 @@ namespace StealthSenses::Config {
         const auto root = nlohmann::json::parse(a_text, nullptr, true, true);
         Settings   settings;
 
+        auto& smell = settings.scent;
+        const auto& jm = Section(root, "scent");
+        Read(jm, "enabled", smell.enabled);
+        Read(jm, "halflife_hours", smell.halflife_hours);
+        Read(jm, "base_strength", smell.base_strength);
+        Read(jm, "blood_bonus", smell.blood_bonus);
+        Read(jm, "radius", smell.radius);
+        Read(jm, "min_strength", smell.min_strength);
+        Read(jm, "spread_max_mult", smell.spread_max_mult);
+        Read(jm, "spread_hours", smell.spread_hours);
+        const ScentSettings scentDefaults;
+        const auto bound = [](float value, float fallback, float lo, float hi) {
+            return std::isfinite(value) ? std::clamp(value, lo, hi) : fallback;
+        };
+        smell.halflife_hours = bound(smell.halflife_hours, scentDefaults.halflife_hours, 0.01f, 24.0f);
+        smell.base_strength = bound(smell.base_strength, scentDefaults.base_strength, 0.0f, 4.0f);
+        smell.blood_bonus = bound(smell.blood_bonus, scentDefaults.blood_bonus, 0.0f, 4.0f);
+        smell.radius = bound(smell.radius, scentDefaults.radius, 16.0f, 4000.0f);
+        smell.min_strength = bound(smell.min_strength, scentDefaults.min_strength, 0.001f, 4.0f);
+        smell.spread_max_mult = bound(smell.spread_max_mult, scentDefaults.spread_max_mult, 1.0f, 2.0f);
+        smell.spread_hours = bound(smell.spread_hours, scentDefaults.spread_hours, 0.001f, 24.0f);
+
         auto& t = settings.trail;
         const auto& jt = Section(root, "trail");
         Read(jt, "enabled", t.enabled);

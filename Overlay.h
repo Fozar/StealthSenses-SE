@@ -24,15 +24,17 @@ namespace StealthSenses::Overlay {
 #ifdef STEALTHSENSES_DEV
     // On kDataLoaded: hooks Present of the game's swap chain
     void Install();
-    // From a task (the input sink queues it): show or hide
+    // From a task: cycle visual -> scent -> both -> off.
     void Toggle();
-    // From the tick task: copies footprints, marks and trackers around the player
+    bool ScentOnly(); // Num1 uses scent while the Num4 overlay is in SCENT mode
+    // From the tick task: copies footprints, scent, marks and trackers around the player.
     void Publish();
     // From the mark task: a mark pin at the player's position
     void NoteMark(int a_number);
 #else
     inline void Install() {}
     inline void Toggle() {}
+    inline bool ScentOnly() { return false; }
     inline void Publish() {}
     inline void NoteMark(int) {}
 #endif

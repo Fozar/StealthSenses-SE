@@ -83,6 +83,44 @@ TEST_CASE("find by seq: exact match across gaps") {
     CHECK(Trail::FindBySeq({}, 1) == nullptr);
 }
 
+TEST_CASE("prune: scent keeps an invisible hard-surface point until both channels fade") {
+    Config::TrailSettings cfg;
+    cfg.hard_visibility = 0.0f;
+    auto fp = Make(1, 0, 0, RE::MATERIAL_ID::kStone);
+    fp.scentSegment = 1;
+    std::deque<Footprint> trail{ fp };
+    Trail::Prune(trail, 0.0f, 0.1f, cfg);
+    REQUIRE(trail.size() == 1);
+    Trail::Prune(trail, 10.0f, 0.1f, cfg);
+    CHECK(trail.empty());
+}
+
+TEST_CASE("thin: keeps both ends of a scent boundary in the sparse older half") {
+    Config::TrailSettings cfg;
+    cfg.max_footprints = 16;
+    auto trail = Walk(17, 1.0f);
+    for (std::size_t i = 0; i < trail.size(); ++i) trail[i].scentSegment = i < 4 ? 1 : 2;
+    Trail::Thin(trail, cfg);
+    CHECK(Trail::FindBySeq(trail, 4) != nullptr);
+    CHECK(Trail::FindBySeq(trail, 5) != nullptr);
+    CHECK(trail.size() <= 16);
+}
+
+TEST_CASE("prune: dilution expiry respects both scent and the visual channel") {
+    Config::TrailSettings cfg;
+    cfg.hard_visibility = 0;
+    auto fp = Make(1, 0, 0, RE::MATERIAL_ID::kStone); fp.scentSegment = 1;
+    std::deque<Footprint> trail{fp};
+    Trail::Prune(trail, 1.3f, 0.1f, cfg);
+    CHECK(trail.size() == 1);
+    Trail::Prune(trail, 1.4f, 0.1f, cfg);
+    CHECK(trail.empty());
+    fp.material = RE::MATERIAL_ID::kDirt;
+    trail.push_back(fp);
+    Trail::Prune(trail, 1.4f, 0.1f, cfg);
+    CHECK(trail.size() == 1);
+}
+
 TEST_CASE("thin: within the limit, newer half intact, older half sparse") {
     Config::TrailSettings cfg;
     cfg.max_footprints = 100;

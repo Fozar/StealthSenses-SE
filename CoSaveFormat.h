@@ -24,8 +24,8 @@
 // calls — WriteRecordData(const T&), ReadRecordData(T&) -> bytes read, ResolveFormID(old, new&).
 // The layouts are what players' saves hold: change one only with a new record version.
 namespace StealthSenses::CoSave {
-    // TRAL: count, then footprints — v1 25 bytes (0.2–0.9), v2 adds the step multiplier (0.10)
-    inline constexpr std::uint32_t kTrailVersion = 2;
+    // TRAL: v1 25 bytes, v2 29 bytes (+step), v3 33 bytes (+scent segment).
+    inline constexpr std::uint32_t kTrailVersion = 3;
 
     #pragma pack(push, 1)
     struct SavedFootprint {
@@ -39,9 +39,14 @@ namespace StealthSenses::CoSave {
         SavedFootprint v1;
         float          step;
     };
+    struct SavedFootprintV3 {
+        SavedFootprintV2 v2;
+        std::uint32_t scentSegment;
+    };
     #pragma pack(pop)
     static_assert(sizeof(SavedFootprint) == 25);
     static_assert(sizeof(SavedFootprintV2) == 29);
+    static_assert(sizeof(SavedFootprintV3) == 33);
 
     // TRKB v1: count, then {actor, marker, prevLinked}
     struct SavedBinding {
@@ -55,32 +60,38 @@ namespace StealthSenses::CoSave {
     void WriteTrail(const I& a_intfc, const std::deque<Trail::Footprint>& a_trail) {
         a_intfc.WriteRecordData(static_cast<std::uint32_t>(a_trail.size()));
         for (const auto& fp : a_trail) {
-            a_intfc.WriteRecordData(SavedFootprintV2{ { fp.pos.x, fp.pos.y, fp.pos.z, fp.space, fp.gameHours,
+            a_intfc.WriteRecordData(SavedFootprintV3{ { { fp.pos.x, fp.pos.y, fp.pos.z, fp.space, fp.gameHours,
                                                           static_cast<std::uint32_t>(fp.material), fp.flags },
-                fp.step });
+                fp.step }, fp.scentSegment });
         }
     }
 
     // Footprints in saved order; seq is not saved (Trail::Restore numbers them anew). A space
     // that no longer resolves (load order changed) drops the footprint; a truncated record
-    // gives what was read before the cut. A v1 footprint has step 1, as it was read then.
+    // gives what was read before the cut. v1 has step 1; v1/v2 have no scent. Restore renumbers
+    // saved scent segments into local runs and starts new live steps in a fresh segment.
     template <class I>
     std::vector<Trail::Footprint> ReadTrail(const I& a_intfc, std::uint32_t a_version = kTrailVersion) {
         std::vector<Trail::Footprint> result;
+        if (a_version < 1 || a_version > kTrailVersion) {
+            SKSE::log::warn("Serialization: unsupported trail version {}", a_version);
+            return result;
+        }
         std::uint32_t                 count = 0;
         if (a_intfc.ReadRecordData(count) != sizeof(count)) {
             SKSE::log::error("Serialization: truncated trail record");
             return result;
         }
         for (std::uint32_t i = 0; i < count; ++i) {
-            SavedFootprintV2 read{ {}, 1.0f };
-            const bool       whole = a_version >= 2 ? a_intfc.ReadRecordData(read) == sizeof(read)
-                                                    : a_intfc.ReadRecordData(read.v1) == sizeof(read.v1);
+            SavedFootprintV3 read{ { {}, 1.0f }, 0 };
+            const bool whole = a_version == 3 ? a_intfc.ReadRecordData(read) == sizeof(read) :
+                               a_version == 2 ? a_intfc.ReadRecordData(read.v2) == sizeof(read.v2) :
+                                                a_intfc.ReadRecordData(read.v2.v1) == sizeof(read.v2.v1);
             if (!whole) {
                 SKSE::log::error("Serialization: truncated footprint {}/{}", i, count);
                 break;
             }
-            const auto& saved = read.v1;
+            const auto& saved = read.v2.v1;
             RE::FormID space = 0;
             if (!a_intfc.ResolveFormID(saved.space, space)) {
                 continue;
@@ -91,7 +102,8 @@ namespace StealthSenses::CoSave {
             fp.gameHours = saved.gameHours;
             fp.material  = static_cast<RE::MATERIAL_ID>(saved.material);
             fp.flags     = saved.flags;
-            fp.step      = std::isfinite(read.step) && read.step >= 0.0f ? read.step : 1.0f;
+            fp.step      = std::isfinite(read.v2.step) && read.v2.step >= 0.0f ? read.v2.step : 1.0f;
+            fp.scentSegment = read.scentSegment; // v1/v2 stay visual-only: water history is unknown
             result.push_back(fp);
         }
         return result;

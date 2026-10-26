@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0 — 2026-10-26
+
+- **Scent trails** — wolves and other scent trackers can follow where you walked, including over stone and in darkness. Scent gradually spreads and weakens, blood strengthens it, and water breaks its chain. Scent pursuit alone adds no detection bonus.
+- **Different noses** — creature-specific scent profiles, a small scent influence for ordinary people, stronger profiles for Khajiit and Argonians, and an additional blood advantage for vampires. Profiles can be extended in JSON.
+- **Save compatibility** — existing saves remain supported. Newly recorded scent trails keep their age and separate trail segments when saved and loaded.
+- **Diagnostics** — updated scent visualization and the standalone telemetry replay for investigating tracking behavior.
+
 ## 0.11.1 — 2026-10-18
 
 - **Fix** — crash on game start (0.11.0) when `Data/SKSE/Plugins` held a file with a non-Latin name (e.g. Chinese characters) and the game was not run in that language. Same for a Windows user name with such characters, which broke the log file path.

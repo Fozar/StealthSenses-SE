@@ -34,6 +34,7 @@ namespace StealthSenses::Trail {
         std::uint8_t     flags    = kNone;
         float            step     = 1.0f;  // how the player stepped (TrailLogic StepMult), 1 = as before 0.10
         std::uint32_t    seq     = 0;     // monotonically increasing along the trail
+        std::uint32_t    scentSegment = 0; // 0: no scent (including legacy saves)
     };
 
     // Space id of a reference: interior cell or worldspace FormID; 0 if not in the world.
@@ -42,6 +43,10 @@ namespace StealthSenses::Trail {
     // Records a footprint at the player's position if far enough from the previous one.
     // a_source is only for logging ("footstep" / "poll").
     void TryRecord(RE::PlayerCharacter* a_player, std::string_view a_source);
+
+    // Every poll tick, even when footsteps are active: notice water before spacing can hide it.
+    void ObserveContact(RE::PlayerCharacter* a_player);
+    void BreakScent(std::string_view a_reason);
 
     // On kDataLoaded: forms the step reads (Light Foot, beast form races, races from the config)
     void Init();
@@ -52,8 +57,7 @@ namespace StealthSenses::Trail {
     // Visibility in [0, ~2] at the current game time and weather.
     float Visibility(const Footprint& a_fp, float a_nowHours, bool a_badWeather);
 
-    // Drops footprints that are below a_minVisibility even in clear weather: they can never be
-    // read again. Leaves gaps in seq.
+    // Drops footprints only when neither visibility nor scent can still use them.
     void Prune(float a_nowHours, float a_minVisibility);
 
     // The live trail's footprint with this seq, if it is still there.

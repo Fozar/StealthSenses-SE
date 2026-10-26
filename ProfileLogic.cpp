@@ -39,7 +39,12 @@ namespace StealthSenses::Profiles {
                 a_warnings.push_back(std::format("{}: '{}' is not a number, ignored", a_where, a_key));
                 return std::nullopt;
             }
-            return std::clamp(it->get<float>(), 0.0f, a_max);
+            const float value = it->get<float>();
+            if (!std::isfinite(value)) {
+                a_warnings.push_back(std::format("{}: '{}' is not finite, ignored", a_where, a_key));
+                return std::nullopt;
+            }
+            return std::clamp(value, 0.0f, a_max);
         }
 
         Patch ReadPatch(const nlohmann::json& a_obj, const std::string& a_where, std::vector<std::string>& a_warnings) {
@@ -49,10 +54,21 @@ namespace StealthSenses::Profiles {
             patch.blood    = ReadValue(a_obj, "blood", kMaxBlood, a_where, a_warnings);
             patch.trackingMult = ReadValue(a_obj, "tracking_mult", kMaxTracking, a_where, a_warnings);
             patch.bloodMult    = ReadValue(a_obj, "blood_mult", kMaxBlood, a_where, a_warnings);
+            patch.smell        = ReadValue(a_obj, "smell", kMaxSmell, a_where, a_warnings);
+            patch.smellBlood   = ReadValue(a_obj, "smell_blood", kMaxSmell, a_where, a_warnings);
+            patch.smellMult    = ReadValue(a_obj, "smell_mult", kMaxSmell, a_where, a_warnings);
+            if (const auto it = a_obj.find("smell_hunt"); it != a_obj.end()) {
+                if (it->is_boolean()) patch.smellHunt = it->get<bool>();
+                else a_warnings.push_back(std::format("{}: 'smell_hunt' is not a boolean, ignored", a_where));
+            }
             return patch;
         }
 
         void Merge(Patch& a_into, const Patch& a_from) {
+            if (a_from.smell) a_into.smell = a_from.smell;
+            if (a_from.smellBlood) a_into.smellBlood = a_from.smellBlood;
+            if (a_from.smellMult) a_into.smellMult = a_from.smellMult;
+            if (a_from.smellHunt) a_into.smellHunt = a_from.smellHunt;
             if (a_from.tracking) {
                 a_into.tracking = a_from.tracking;
             }
@@ -72,6 +88,9 @@ namespace StealthSenses::Profiles {
     }
 
     void Patch::ApplyTo(Profile& a_profile) const {
+        a_profile.smell = std::min(smell.value_or(a_profile.smell) * smellMult.value_or(1.0f), kMaxSmell);
+        a_profile.smellBlood = smellBlood.value_or(a_profile.smellBlood);
+        a_profile.smellHunt = smellHunt.value_or(a_profile.smellHunt);
         a_profile.tracking = tracking.value_or(a_profile.tracking);
         a_profile.night    = night.value_or(a_profile.night);
         a_profile.blood    = blood.value_or(a_profile.blood);

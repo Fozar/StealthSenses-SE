@@ -20,7 +20,8 @@
 
 // Structured trace for offline analysis: StealthSenses.trace.jsonl next to the log, one JSON
 // object per line. Record types: load, player, npc, footprint, log, notice, idle, alert, sight,
-// body, perf, mark.
+// body, perf, mark, scent_break, trail_removed. A load includes the scent model settings;
+// footprints include born (game hours), segment (0 = visual-only) and scentBase.
 // Game-thread only.
 namespace StealthSenses::Telemetry {
     void Open();
@@ -36,5 +37,6 @@ namespace StealthSenses::Telemetry {
     int Mark();
 
     nlohmann::json Vec(const RE::NiPoint3& a_pos);
+    nlohmann::json ScentModel(); // also attached to new sources so rotated traces stand alone
     std::string    Hex(std::uint32_t a_value);
 }

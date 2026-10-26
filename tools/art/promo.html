@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
 <!-- Mod page images, 1920x1080: promo.html#features (what the mod does), promo.html#hunt (how a tracker reads a trail),
-     promo.html#senses (who reads it and when).
+     promo.html#senses (who reads it and when), promo.html#scent (tracking by scent).
      Kept general on purpose (no numbers, no versions); update when a feature listed here changes. See README.md -->
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@1,500&family=Inter:wght@400;500;600&display=block" rel="stylesheet">
 <style>
@@ -30,7 +30,7 @@
   .panel .k { font-size: 15px; color: #d6b06e; letter-spacing: .3em; }
   .panel h3 { margin: 10px 0 14px; font-size: 28px; color: #f1f4fa; letter-spacing: .06em; }
   .panel p { margin: 0; font-size: 18.5px; line-height: 1.55; color: #c3ccdc; }
-  /* #senses: three wide panels */
+  /* #senses and #scent: three wide panels */
   .panels.wide { gap: 32px; }
   .panels.wide .panel { width: 540px; height: 560px; }
   .panels.wide .panel .txt { padding: 26px 32px 0; }
@@ -249,7 +249,7 @@ function drawEye(svg) {
 if (MODE === 'hunt') {
   head.innerHTML = `<div class="small">STEALTH SENSES · HOW A TRACKER HUNTS</div>
     <div class="title">THEY FOLLOW WHERE YOU WALKED</div><div class="rule"></div>
-    <div class="sub">Seen from above: one hunt, from the first print to the last.</div>`;
+    <div class="sub">Seen from above: one footprint hunt, from the first print to the last.</div>`;
   // ground: a band of snow with a stone outcrop the trail crosses
   const stone = 'M 1010 470 C 1080 420 1200 430 1260 470 C 1320 520 1310 640 1270 700 C 1220 770 1100 780 1040 730 C 980 680 960 530 1010 470 Z';
   const rocks = 'M 1800 330 C 1850 300 1905 330 1900 380 C 1896 420 1850 440 1815 425 C 1785 410 1775 350 1800 330 Z ' +
@@ -316,7 +316,7 @@ if (MODE === 'hunt') {
     return `<div class="stage-cap" style="left:${x}px;top:${top}px">
       ${side < 0 ? `<h4>${t}</h4><p>${p}</p><div class="n" style="margin-top:12px">${i + 1}</div>`
                  : `<div class="n">${i + 1}</div><h4>${t}</h4><p>${p}</p>`}</div>`;
-  }).join('') + `<div class="foot sub">Walk on stone, wade through water, keep out of sight, and it goes cold.</div>`;
+  }).join('') + `<div class="foot sub">Stone hides footprints. Water breaks both trails. Keep out of sight.</div>`;
 }
 
 // ---------- #senses ----------
@@ -386,6 +386,54 @@ function drawAlarm(svg) {
   }
   hunter(svg, 110, 96, .8, true);
   el('text', { x: 92, y: 40, 'text-anchor': 'middle', class: 'title', 'font-size': 40, fill: GOLD }, svg).textContent = '!';
+}
+
+// ---------- #scent ----------
+if (MODE === 'scent') {
+  head.innerHTML = `<div class="small">STEALTH SENSES · FOLLOWING YOUR SCENT</div>
+    <div class="title">A TRAIL THEY CAN SMELL</div><div class="rule"></div>
+    <div class="sub">Stone hides footprints. A keen nose can still follow.</div>`;
+  const PANELS = [
+    ['I', 'A nose for your trail', 'Wolves and other scent trackers follow where you walked, even on stone and after dark. Each creature has its own sense of smell.', drawScent],
+    ['II', 'Blood tells', 'Blood strengthens your scent for every creature that can smell it. Vampires have an extra advantage when the trail is bloody.', drawBloodScent],
+    ['III', 'Time and water', 'Scent spreads locally as it weakens. Old sources fade beyond perception, and water breaks the chain.', drawScentFade],
+  ];
+  content.innerHTML = `<div class="panels wide">${PANELS.map(([k, t, p]) =>
+    `<div class="panel"><svg width="540" height="342" viewBox="0 0 410 260"></svg>
+     <div class="txt"><div class="small k">${k}</div><h3 class="title">${t.toUpperCase()}</h3><p class="body">${p}</p></div></div>`).join('')}</div>`;
+  document.querySelectorAll('.panel svg').forEach((svg, i) => {
+    defs(svg);
+    el('rect', { width: 410, height: 260, fill: 'url(#snowPanel)' }, svg);
+    PANELS[i][3](svg);
+  });
+}
+function drawScent(svg) {
+  el('path', { d: 'M 0 200 L 70 170 L 110 185 L 170 155 L 240 178 L 300 132 L 410 152 L 410 260 L 0 260 Z', fill: '#34414b', 'fill-opacity': .7 }, svg);
+  for (const [x, y, r, opacity] of [[172, 177, 34, .18], [237, 151, 42, .27], [305, 124, 50, .36]]) {
+    el('ellipse', { cx: x, cy: y, rx: r, ry: r * .55, fill: '#98bfb1', 'fill-opacity': opacity, stroke: '#b5d4c6', 'stroke-opacity': opacity + .1 }, svg);
+    el('circle', { cx: x, cy: y, r: 4, fill: '#c9e4d8', opacity: opacity + .35 }, svg);
+  }
+  const wolf = el('g', { transform: 'translate(38 130)', fill: '#101925', stroke: GOLD, 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+  el('path', { d: 'M 0 45 L 14 34 L 28 12 L 63 9 L 87 16 L 107 -6 L 113 14 L 124 3 L 128 27 L 151 38 L 155 47 L 131 50 L 112 43 L 91 52 L 82 86 L 73 86 L 74 51 L 35 53 L 27 86 L 17 86 L 20 49 L 7 57 Z' }, wolf);
+  el('circle', { cx: 126, cy: 31, r: 2.3, fill: GOLD, stroke: 'none' }, wolf);
+  el('path', { d: 'M 195 162 Q 224 141 246 149 M 196 173 Q 227 157 251 165', fill: 'none', stroke: '#b5d4c6', 'stroke-opacity': .7, 'stroke-width': 2, 'stroke-linecap': 'round' }, svg);
+}
+function drawBloodScent(svg) {
+  const path = el('path', { d: 'M 25 224 C 110 190 160 158 220 146 S 315 110 387 65', fill: 'none' }, svg);
+  trail(svg, path, { size: .6, spacing: 35, from: 20, fresh: () => .55 });
+  for (const [x, y, r] of [[104, 188, 35], [219, 145, 43], [341, 91, 52]]) {
+    el('ellipse', { cx: x, cy: y, rx: r, ry: r * .65, fill: '#b95a50', 'fill-opacity': .14, stroke: '#e38b79', 'stroke-opacity': .35 }, svg);
+    el('path', { d: `M ${x} ${y - 14} C ${x - 17} ${y + 3} ${x - 13} ${y + 16} ${x} ${y + 16} C ${x + 13} ${y + 16} ${x + 17} ${y + 3} ${x} ${y - 14} Z`, fill: '#ba574d', stroke: '#e6a08a', 'stroke-width': 1 }, svg);
+  }
+}
+function drawScentFade(svg) {
+  for (const [x, r, opacity] of [[65, 35, .7], [175, 45, .4], [300, 53, .12]]) {
+    el('circle', { cx: x, cy: 126, r, fill: '#a7cabb', 'fill-opacity': opacity * .5, stroke: '#c1ddcf', 'stroke-opacity': opacity, 'stroke-width': 2 }, svg);
+    el('circle', { cx: x, cy: 126, r: 6, fill: '#c1ddcf', opacity }, svg);
+  }
+  el('path', { d: 'M 108 126 L 118 126 M 228 126 L 238 126', stroke: GOLD, 'stroke-width': 2 }, svg);
+  el('path', { d: 'M 0 210 Q 70 185 140 210 T 280 210 T 420 210 L 420 260 L 0 260 Z', fill: '#50879c', 'fill-opacity': .4 }, svg);
+  el('path', { d: 'M 10 227 Q 70 207 130 226 T 250 226 T 400 226', fill: 'none', stroke: '#b5d5df', 'stroke-opacity': .55, 'stroke-width': 2 }, svg);
 }
 
 // overlay on everything

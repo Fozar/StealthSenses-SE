@@ -28,6 +28,19 @@ inline constexpr bool kDevBuild = false;
 #endif
 
 namespace StealthSenses::Config {
+    struct ScentSettings {
+        bool  enabled           = true;
+        float halflife_hours    = 0.5f;
+        float base_strength     = 1.0f;
+        float blood_bonus       = 1.0f;
+        float radius            = 450.0f; // initial reference radius of the linear falloff
+        float min_strength      = 0.1f;   // minimum perceived concentration
+        float spread_max_mult   = 1.25f;  // bounded expansion of the source's reference radius
+        float spread_hours      = 0.1f;   // game hours: expansion time constant
+
+        bool operator==(const ScentSettings&) const = default;
+    };
+
     struct TrailSettings {
         bool  enabled                = true;
         float min_spacing            = 64.0f;   // units between two recorded footprints
@@ -171,6 +184,7 @@ namespace StealthSenses::Config {
     };
 
     struct Settings {
+        ScentSettings   scent;
         TrailSettings   trail;
         StepSettings    step;
         TrackerSettings tracker;

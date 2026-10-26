@@ -19,6 +19,8 @@
 #include "Config.h"
 #include "Detection.h"
 #include "Profiles.h"
+#include "Overlay.h"
+#include "ScentLogic.h"
 #include "Telemetry.h"
 #include "Trail.h"
 #include "TrailLogic.h"
@@ -79,6 +81,8 @@ namespace StealthSenses::Trackers {
         }
 
         struct State {
+            bool                             scent = false;
+            std::uint32_t                    scentSegment = 0;
             Mode                             mode      = Mode::Follow;
             std::uint32_t                    lastSeq   = 0;
             RE::NiPoint3                     trailPos;          // last footprint reached for
@@ -294,7 +298,7 @@ namespace StealthSenses::Trackers {
 
         enum class Sight { Seen, Blocked, Unknown };
 
-        Sight CanSee(RE::Actor* a_actor, const RE::NiPoint3& a_point) {
+        Sight CanSee(RE::Actor* a_actor, const RE::NiPoint3& a_point, bool a_scent = false) {
             auto* cell  = a_actor->GetParentCell();
             auto* world = cell ? cell->GetbhkWorld() : nullptr;
             if (!world) {
@@ -332,10 +336,15 @@ namespace StealthSenses::Trackers {
                 result = shortBy <= kLosSlack ? Sight::Seen : Sight::Blocked;
                 break;
             }
+            // Scent uses this ray only as a conservative barrier check, independent of FOV and
+            // the visual LOS setting. No end slack or actor passthrough: a wall next to the source
+            // must not become transparent. This does not simulate diffusion around obstacles.
+            if (a_scent && collidable) result = shortBy <= 0.0f ? Sight::Seen : Sight::Blocked;
             // Every ray: what it hit and how far short of the footprint (whether walls block at all)
             Telemetry::Write({ { "type", "sight" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
                 { "eye", Telemetry::Vec(eye) }, { "to", Telemetry::Vec(to) }, { "hit", collidable != nullptr },
-                { "layer", static_cast<int>(layer) }, { "short", shortBy }, { "blocked", result == Sight::Blocked } });
+                { "layer", static_cast<int>(layer) }, { "short", shortBy }, { "blocked", result == Sight::Blocked },
+                { "channel", a_scent ? "scent" : "visual" } });
             return result;
         }
 
@@ -442,7 +451,7 @@ namespace StealthSenses::Trackers {
             }
 
             // Trail direction at this footprint, from the footprint before it
-            if (const auto* prev = Trail::FindBySeq(a_fp.seq - 1)) {
+            if (const auto* prev = Trail::FindBySeq(a_fp.seq - 1); prev && (!a_state.scent || Scent::Connected(*prev, a_fp))) {
                 auto dir = a_fp.pos - prev->pos;
                 dir.z    = 0.0f;
                 if (const float len = dir.Length(); len > 1.0f) {
@@ -452,6 +461,7 @@ namespace StealthSenses::Trackers {
 
             MoveMarker(a_state, a_fp.pos);
             a_state.lastSeq    = a_fp.seq;
+            a_state.scentSegment = a_state.scent ? a_fp.scentSegment : 0;
             a_state.trailPos   = a_fp.pos;
             a_state.sinceStep  = 0.0f;
             if (first) {
@@ -464,8 +474,11 @@ namespace StealthSenses::Trackers {
             a_state.lastPos    = a_actor->GetPosition();
             SetMode(a_actor, a_state, Mode::Follow);
 
-            Say(std::format("{} {} footprint #{} dist {:.0f}", Describe(a_actor),
-                first ? "picked up trail at" : "follows to", a_fp.seq, a_actor->GetPosition().GetDistance(a_fp.pos)));
+            Say(std::format("{} {} footprint #{} dist {:.0f} via {} segment {}", Describe(a_actor),
+                first ? "picked up trail at" : "follows to", a_fp.seq, a_actor->GetPosition().GetDistance(a_fp.pos),
+                a_state.scent ? "scent" : "visual", a_state.scentSegment));
+            Telemetry::Write({ { "type", "track_target" }, { "id", Telemetry::Hex(a_actor->GetFormID()) },
+                { "seq", a_fp.seq }, { "channel", a_state.scent ? "scent" : "visual" }, { "segment", a_state.scentSegment } });
             return true;
         }
 
@@ -579,7 +592,7 @@ namespace StealthSenses::Trackers {
                 return 0;
             }
             int bonus = 0;
-            if (g_trackers.contains(a_id)) {
+            if (const auto it = g_trackers.find(a_id); it != g_trackers.end() && !it->second.scent) {
                 bonus = std::max(bonus, cfg.tracker_bonus);
             }
             if (g_recentCombat.contains(a_id)) {
@@ -649,8 +662,7 @@ namespace StealthSenses::Trackers {
                 sight == Sight::Blocked ? "blocked" : sight == Sight::Seen ? "NOT blocked" : "unknown, no havok world");
         }
 
-        // Kept while the keenest profile could still read it
-        Trail::Prune(now, cfg.faint_visibility / Profiles::MaxBoost());
+        // The ticker already pruned points unused by either visual tracking or scent.
 
         // 0.11: darkness by the hour outside, constant inside; profiles without night vision lose by it
         const auto& dark     = Config::Get().dark;
@@ -677,6 +689,7 @@ namespace StealthSenses::Trackers {
         struct Candidate {
             const Trail::Footprint* fp;
             float                   vis;
+            Scent::Sample           scent;
         };
         std::vector<Candidate> candidates;
         std::size_t            clearCount = 0;
@@ -688,8 +701,12 @@ namespace StealthSenses::Trackers {
                     continue;
                 }
                 const float vis = Trail::Visibility(fp, now, badWeather);
-                if (vis * Profiles::MaxBoost() >= cfg.faint_visibility) {
-                    candidates.push_back({ &fp, vis });
+                const auto scent = Scent::SampleAt(fp, now, Config::Get().scent);
+                // Use the hard visual bound: layered tracking_mult rules can exceed the largest
+                // single rule's boost. Scent-only sources survive this prefilter as well.
+                if (vis * Profiles::kMaxTracking * Profiles::kMaxBlood >= cfg.faint_visibility ||
+                    scent.peak >= Config::Get().scent.min_strength) {
+                    candidates.push_back({ &fp, vis, scent });
                     const float read = Profiles::Perceived(vis, fp.flags & Trail::kBlood, darkness, dark.night_penalty, human);
                     clearCount += read >= cfg.min_visibility;
                     faintCount += read >= cfg.faint_visibility && read < cfg.min_visibility;
@@ -708,8 +725,9 @@ namespace StealthSenses::Trackers {
             float Perceived(const Candidate& a_c) const {
                 return Profiles::Perceived(a_c.vis, a_c.fp->flags & Trail::kBlood, darkness, nightPenalty, profile);
             }
-            bool Clear(const Candidate& a_c) const { return Perceived(a_c) >= cfg.min_visibility; }
+            bool Clear(const Candidate& a_c) const { return profile.tracking > 0 && Perceived(a_c) >= cfg.min_visibility; }
             bool ReadableFrom(const Candidate& a_c, const RE::NiPoint3& a_at) const {
+                if (profile.tracking <= 0) return false;
                 const float vis = Perceived(a_c);
                 return vis >= cfg.min_visibility ||
                        (vis >= cfg.faint_visibility && a_at.GetDistance(a_c.fp->pos) <= cfg.close_read_radius);
@@ -764,7 +782,8 @@ namespace StealthSenses::Trackers {
                     { "sitsleep", state ? static_cast<int>(state->GetSitSleepState()) : -1 },
                     { "weapon", state && state->IsWeaponDrawn() },
                     { "pkg", Telemetry::Hex(package ? package->GetFormID() : 0) },
-                    { "prof", { { "name", profile.name }, { "tracking", profile.tracking }, { "night", profile.night }, { "blood", profile.blood } } } };
+                    { "prof", { { "name", profile.name }, { "tracking", profile.tracking }, { "night", profile.night }, { "blood", profile.blood },
+                        { "smell", profile.smell }, { "smellBlood", profile.smellBlood }, { "smellHunt", profile.smellHunt } } } };
                 // Vanilla "dead bodies this NPC detected" list, to learn what fills it
                 if (const auto* mh = a_actor->GetActorRuntimeData().currentProcess->middleHigh; mh && !mh->deadDetectList.empty()) {
                     npc["deadList"] = mh->deadDetectList.size();
@@ -778,7 +797,8 @@ namespace StealthSenses::Trackers {
                     const auto& s = tracked->second;
                     npc["track"] = { { "seq", s.lastSeq }, { "target", Telemetry::Vec(s.target) },
                         { "trail", Telemetry::Vec(s.trailPos) }, { "mode", ModeName(s.mode) },
-                        { "since", s.sinceStep }, { "modeTime", s.modeTime }, { "hops", s.hops }, { "fight", s.fight } };
+                        { "since", s.sinceStep }, { "modeTime", s.modeTime }, { "hops", s.hops }, { "fight", s.fight },
+                        { "channel", s.scent ? "scent" : "visual" }, { "segment", s.scentSegment } };
                 }
                 Telemetry::Write(std::move(npc));
             }
@@ -815,11 +835,11 @@ namespace StealthSenses::Trackers {
             // Reading footprints takes a mind: animals, automatons and the undead have tracking 0 in
             // the profiles (before 0.11 humanoids_only). Animals see and hear far better (meter 86-98
             // in test 0.6.0) and count as hostile: rabbits and deer tailed the player.
-            if (profile.tracking <= 0.0f) {
+            if (profile.tracking <= 0.0f && (!Config::Get().scent.enabled || profile.smell <= 0.0f)) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }
             std::optional<RE::NiPoint3> bodyPos;
-            if (cfg.body_found_seconds > 0.0f) {
+            if (profile.tracking > 0 && cfg.body_found_seconds > 0.0f) {
                 auto* corpse = SeesOwnBody(a_actor, bodies);
                 const bool saw = corpse != nullptr;
                 if (!corpse) {
@@ -844,6 +864,55 @@ namespace StealthSenses::Trackers {
             seen.insert(id);
             const auto pos = a_actor->GetPosition();
 
+            // Freshest locally perceived source, bounded rays per NPC/tick. Never sense from the
+            // travel marker: vanilla stops ~270 units before it, which is not the NPC's nose.
+            auto scentNext = [&](std::uint32_t a_skip, std::uint32_t a_segment, bool a_suspicious, bool a_pickup) {
+                const auto& sc = Config::Get().scent;
+                const Trail::Footprint* best = nullptr;
+                int nearby = 0, rays = 0, blocked = 0, unknown = 0;
+                float strongest = 0, pickedStrength = 0;
+                Scent::Sample pickedSource;
+                std::vector<const Trail::Footprint*> inRange;
+                if (sc.enabled && profile.smell > 0) {
+                    for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
+                        const auto& c = *it;
+                        const auto* fp = c.fp;
+                        if (!Scent::Ahead(*fp, a_skip, a_segment) || OtherLevel(pos, fp->pos)) continue;
+                        const float strength = Scent::Perceived(c.scent, pos.GetDistance(fp->pos), fp->flags & Trail::kBlood, profile, sc);
+                        strongest = std::max(strongest, strength);
+                        if (strength < sc.min_strength || strength <= 0) continue;
+                        ++nearby;
+                        if (a_pickup && !a_suspicious && !profile.smellHunt && !(cfg.alarm_blood && (fp->flags & Trail::kBlood))) continue;
+                        inRange.push_back(fp);
+                    }
+                    best = Scent::FirstReachable(inRange, [&](const Trail::Footprint& fp) {
+                        ++rays;
+                        const auto sight = CanSee(a_actor, fp.pos, true);
+                        if (sight != Sight::Seen) {
+                            blocked += sight == Sight::Blocked;
+                            unknown += sight == Sight::Unknown;
+                            return false;
+                        }
+                        return true;
+                    }, kMaxSightRays);
+                    if (best) {
+                        pickedSource = Scent::SampleAt(*best, now, sc);
+                        pickedStrength = Scent::Perceived(pickedSource, pos.GetDistance(best->pos), best->flags & Trail::kBlood, profile, sc);
+                    }
+                }
+                if (nearby || a_segment) {
+                    Telemetry::Write({ { "type", "scent_notice" }, { "id", Telemetry::Hex(id) },
+                        { "stage", a_pickup ? "pickup" : "continue" }, { "segment", a_segment },
+                        { "near", nearby }, { "rays", rays }, { "blocked", blocked }, { "unknown", unknown },
+                        { "strongest", strongest }, { "perceived", pickedStrength }, { "source", pickedSource.peak },
+                        { "spreadRadius", pickedSource.radius },
+                        { "picked", best ? best->seq : 0 }, { "pickedSegment", best ? best->scentSegment : 0 },
+                        { "reason", best ? "picked" : !sc.enabled ? "disabled" : profile.smell <= 0 ? "no_sense" :
+                            rays ? "barrier_or_budget" : nearby ? "calm" : "no_local_source" } });
+                }
+                return best;
+            };
+
             if (tracked == g_trackers.end() && bodyPos && g_trackers.size() < static_cast<std::size_t>(cfg.max_trackers)) {
                 // Just found a body: goes to it and searches from there
                 State state;
@@ -863,7 +932,7 @@ namespace StealthSenses::Trackers {
                 // 0.11: a calm one still takes up an alarming footprint — a werewolf's or a vampire
                 // lord's, or a bloody one — if it sees it
                 const bool anyAlarm = cfg.alarm_beast || cfg.alarm_blood;
-                if ((!suspicious && !anyAlarm) || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
+                if ((!suspicious && !anyAlarm && !profile.smellHunt) || g_trackers.size() >= static_cast<std::size_t>(cfg.max_trackers)) {
                     return RE::BSContainer::ForEachResult::kContinue;
                 }
                 const auto memory = g_memory.find(id);
@@ -916,6 +985,11 @@ namespace StealthSenses::Trackers {
                         { "inView", inView.size() }, { "blocked", blocked }, { "sitsleep", static_cast<int>(sitSleep) },
                         { "picked", best != nullptr } });
                 }
+                bool viaScent = false;
+                if (!best && !idleBody) {
+                    best = scentNext(skipSeq, 0, suspicious, true);
+                    viaScent = best != nullptr;
+                }
                 if (best) {
                     const char* alarm = (best->flags & Trail::kBeast)       ? ", a werewolf's" :
                                         (best->flags & Trail::kVampireLord) ? ", a vampire lord's" :
@@ -923,6 +997,8 @@ namespace StealthSenses::Trackers {
                     (suspicious ? Note : Say)(std::format("{} noticed footprint #{}{} (meter {}, alert {}, after fight {}, found body {}, profile {})",
                         Describe(a_actor), best->seq, alarm, meter, alerted, afterFight, foundBody, profile.name));
                     State state;
+                    state.scent = viaScent;
+                    state.profile = profile.name;
                     if (Steer(player, a_actor, state, *best)) {
                         g_trackers.emplace(id, std::move(state));
                     }
@@ -932,6 +1008,11 @@ namespace StealthSenses::Trackers {
 
             auto& state   = tracked->second;
             state.profile = profile.name;
+            if (state.scent && (!Config::Get().scent.enabled || profile.smell <= 0)) {
+                Drop(a_actor, state, "no longer senses scent");
+                seen.erase(id);
+                return RE::BSContainer::ForEachResult::kContinue;
+            }
             if (state.fight > 0.0f) {
                 // The fight is over and the player is not in sight: back to where it was. The fight
                 // dragged it off and vanilla may have dropped the alert; the mode starts over.
@@ -1012,7 +1093,11 @@ namespace StealthSenses::Trackers {
             // after a gap (e.g. the trail crossed stone) the first one near the last footprint.
             // Footprints on another level are skipped: the straight-line distance lies there.
             const Trail::Footprint* next = nullptr;
+            if (state.scent) {
+                next = scentNext(state.lastSeq, state.scentSegment, true, false);
+            }
             for (const auto& c : candidates) {
+                if (state.scent) break;
                 const auto* fp = c.fp;
                 // A faint footprint is also read around the footprint the NPC was sent to: travel
                 // stops ~270 short of it, so measured from the NPC alone the next faint one was
@@ -1029,7 +1114,7 @@ namespace StealthSenses::Trackers {
             // print near the body, 2468 units off (test 0.8)
             bool       gap      = false;
             const bool freshest = state.lastSeq == 0;
-            if (!next) {
+            if (!next && !state.scent) {
                 for (const auto& c : candidates) {
                     const auto* fp = c.fp;
                     if (reading.Clear(c) && fp->seq > state.lastSeq && state.trailPos.GetDistance(fp->pos) <= cfg.gap_distance &&
@@ -1070,7 +1155,7 @@ namespace StealthSenses::Trackers {
                     Note(std::format("{} can't reach #{} ({:.0f} away, not moving {:.0f}s), searches instead",
                         Describe(a_actor), state.lastSeq, toTarget, state.stillTime));
                     searchOrGiveUp();
-                } else if (state.arrived && state.humanoid && state.examineCooldown <= 0.0f) {
+                } else if (state.arrived && state.humanoid && !state.scent && state.examineCooldown <= 0.0f) {
                     // Bends down to read the footprint before going on
                     state.examineCooldown = cfg.examine_every;
                     SetMode(a_actor, state, Mode::Examine);
@@ -1168,21 +1253,32 @@ namespace StealthSenses::Trackers {
         if (!g_ready || !a_actor || !player || a_actor == player || a_actor->IsDead()) {
             return;
         }
-        // The nearest footprint in its space and on its level, readable or not: a test of following,
-        // not noticing
+        // Visual mode bypasses notice conditions. Scent mode still needs a local, reachable source;
+        // try a bounded sequence of nearest candidates, just as natural pickup checks alternatives.
         const auto              space = Trail::SpaceOf(a_actor);
         const auto              pos   = a_actor->GetPosition();
-        const Trail::Footprint* best  = nullptr;
+        const auto profile = Profiles::For(a_actor);
+        const bool scent = Overlay::ScentOnly() || (profile.tracking <= 0 && profile.smell > 0);
+        const auto* calendar = RE::Calendar::GetSingleton();
+        std::vector<const Trail::Footprint*> nearby;
         for (const auto& fp : Trail::Footprints()) {
-            if (fp.space == space && !OtherLevel(pos, fp.pos) && (!best || pos.GetDistance(fp.pos) < pos.GetDistance(best->pos))) {
-                best = &fp;
-            }
+            if (scent && (!calendar ||
+                Scent::Perceived(Scent::SampleAt(fp, calendar->GetHoursPassed(), Config::Get().scent), pos.GetDistance(fp.pos),
+                    fp.flags & Trail::kBlood, profile, Config::Get().scent) < Config::Get().scent.min_strength ||
+                fp.scentSegment == 0)) continue;
+            if (fp.space == space && !OtherLevel(pos, fp.pos)) nearby.push_back(&fp);
         }
+        std::ranges::stable_sort(nearby, {}, [&](const auto* fp) { return pos.GetDistance(fp->pos); });
+        const auto* best = scent ? Scent::FirstReachable(nearby, [&](const Trail::Footprint& fp) {
+            return CanSee(a_actor, fp.pos, true) == Sight::Seen;
+        }, kMaxSightRays) : nearby.empty() ? nullptr : nearby.front();
         if (!best) {
-            Say(std::format("debug: no footprint in {}'s space on its level", Describe(a_actor)));
+            Say(std::format("debug: no {} source in {}'s space/level/range or within barrier ray budget", scent ? "scent" : "visual", Describe(a_actor)));
             return;
         }
         auto& state = g_trackers[a_actor->GetFormID()];
+        state.scent = scent;
+        state.profile = profile.name;
         if (!Steer(player, a_actor, state, *best)) {
             g_trackers.erase(a_actor->GetFormID());
             return;
@@ -1232,6 +1328,7 @@ namespace StealthSenses::Trackers {
         const RE::NiPoint3 dir{ std::sin(angle), std::cos(angle), 0.0f };
         auto        origin = from->GetPosition();
         int         count  = 0;
+        Trail::BreakScent("paint start");
         // Every 64 units like real steps, from 2 m ahead to ~30 m; each point dropped onto the
         // navmesh so it lies on walkable ground
         for (float d = 128.0f; d <= 2100.0f; d += 64.0f) {
@@ -1240,6 +1337,7 @@ namespace StealthSenses::Trackers {
             ++count;
         }
         Say(std::format("debug: painted {} footprints ahead of {}", count, Describe(from)));
+        Trail::BreakScent("paint end");
     }
 
     void DebugReset() {
@@ -1292,8 +1390,8 @@ namespace StealthSenses::Trackers {
             }
             const char* name   = actor->GetName();
             const bool  search = state.mode == Mode::Hop || state.mode == Mode::Look;
-            auto        label  = std::format("{} {} #{} {:.0f}s", name && *name ? name : "?", ModeName(state.mode),
-                        state.lastSeq, state.modeTime);
+            auto        label  = std::format("{} {} {} #{} {:.0f}s seg{}", name && *name ? name : "?",
+                        state.scent ? "SCENT" : "VISUAL", ModeName(state.mode), state.lastSeq, state.modeTime, state.scentSegment);
             if (search) {
                 label += std::format(" hop {}", state.hops);
             }

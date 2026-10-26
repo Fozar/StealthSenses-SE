@@ -2,6 +2,7 @@
 
 #include "Config.h"
 #include "ProfileLogic.h"
+#include "ScentLogic.h"
 #include "TrailLogic.h"
 
 #include <doctest/doctest.h>
@@ -9,6 +10,73 @@
 
 using namespace StealthSenses;
 using Profiles::Layer;
+
+TEST_CASE("profiles: scent fields merge independently, clamp and retain explicit false") {
+    Profiles::RuleSet set;
+    std::vector<std::string> warnings;
+    Profiles::Parse(R"({"default":{"smell":0.1,"smell_hunt":true},"rules":[
+      {"keyword":"A|1","name":"vampire","smell":1.6,"smell_blood":4},
+      {"faction":"A|2","name":"passive","smell_mult":0.5,"smell_hunt":false}]})", set, warnings);
+    const Profiles::Rule* rules[]{ &set.rules[0], &set.rules[1] };
+    auto p = Profiles::Resolve(set.base, rules);
+    CHECK(p.smell == doctest::Approx(0.8));
+    CHECK(p.smellBlood == 4);
+    CHECK_FALSE(p.smellHunt);
+    CHECK(p.tracking == 1);
+    Profiles::Parse(R"({"default":{"smell":99,"smell_blood":-1,"smell_hunt":"yes"}})", set, warnings);
+    p = Profiles::Resolve(set.base, {});
+    CHECK(p.smell == Profiles::kMaxSmell);
+    CHECK(p.smellBlood == 0);
+    CHECK(p.smellHunt); // malformed override leaves previous true
+    CHECK(warnings.size() == 1);
+}
+
+TEST_CASE("profiles: shipped scent rules preserve ranks and undead exceptions") {
+    std::ifstream file(STEALTHSENSES_SOURCE_DIR "/StealthSensesProfiles.json");
+    const std::string text{ std::istreambuf_iterator<char>(file), {} };
+    Profiles::RuleSet set; std::vector<std::string> warnings;
+    Profiles::Parse(text, set, warnings);
+    auto resolve = [&](std::string_view race, std::initializer_list<std::string_view> keywords = {}) {
+        std::vector<const Profiles::Rule*> matches;
+        for (const auto& rule : set.rules) {
+            if ((rule.layer == Layer::kRace && rule.form == race) ||
+                (rule.layer == Layer::kKeyword && std::ranges::find(keywords, rule.form) != keywords.end()))
+                matches.push_back(&rule);
+        }
+        return Profiles::Resolve(set.base, matches);
+    };
+    const auto mammoth = resolve("Skyrim.esm|0131FF");
+    const auto wolf = resolve("Skyrim.esm|01320A");
+    const auto cat = resolve("Skyrim.esm|013200");
+    const auto giant = resolve("Skyrim.esm|0131F9");
+    const auto crab = resolve("Skyrim.esm|0BA545");
+    CHECK(mammoth.smell > wolf.smell);
+    CHECK(wolf.smell > cat.smell);
+    CHECK(cat.smell > giant.smell);
+    CHECK(giant.smell > crab.smell);
+    CHECK(crab.smell > 0);
+    CHECK(wolf.smellHunt);
+    CHECK_FALSE(mammoth.smellHunt);
+    const auto human = resolve("Skyrim.esm|013746", {"Skyrim.esm|013794"});
+    const auto argonian = resolve("Skyrim.esm|013740", {"Skyrim.esm|013794"});
+    const auto khajiit = resolve("Skyrim.esm|013745", {"Skyrim.esm|013794"});
+    CHECK(khajiit.smell > argonian.smell);
+    CHECK(argonian.smell > human.smell);
+    CHECK(human.smell > 0);
+    const auto vampire = resolve("Skyrim.esm|088845", {"Skyrim.esm|013794", "Skyrim.esm|013796", "Skyrim.esm|0A82BB"});
+    CHECK(vampire.smell >= wolf.smell);
+    CHECK(vampire.smellBlood > 1);
+    CHECK(resolve("Dawnguard.esm|00C5F0", {"Skyrim.esm|013796"}).smell == mammoth.smell);
+    for (auto race : {"Dawnguard.esm|00A2C6", "Dawnguard.esm|019D86", "Dawnguard.esm|010D00"}) {
+        const auto gargoyle = resolve(race, {"Skyrim.esm|013794", "Skyrim.esm|013796", "Skyrim.esm|0A82BB"});
+        CHECK_MESSAGE(gargoyle.smell == 0, race);
+        CHECK_FALSE(gargoyle.smellHunt);
+        CHECK(Scent::Perceived({2, 450}, 0, true, gargoyle, Config::ScentSettings{}) == 0);
+    }
+    for (auto race : {"Skyrim.esm|0131EF", "Skyrim.esm|0131F0", "Dragonborn.esm|035538", "Dragonborn.esm|01DCB9", "Skyrim.esm|1052A3"})
+        CHECK_MESSAGE(resolve(race, {"Skyrim.esm|013794", "Skyrim.esm|013796"}).smell == 0, race);
+    CHECK(Profiles::Resolve(set.base, {}).smell == 0); // no blanket Animal sniffers
+}
 
 namespace {
     Profiles::RuleSet ParseOne(std::string_view a_text, std::vector<std::string>* a_warnings = nullptr) {

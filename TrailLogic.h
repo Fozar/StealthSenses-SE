@@ -46,9 +46,10 @@ namespace StealthSenses::Trail {
     // halflife_hours of age; in bad weather the halflife is shorter.
     float Visibility(const Footprint& a_fp, float a_nowHours, bool a_badWeather, const Config::TrailSettings& a_cfg);
 
-    // Drops footprints below a_minVisibility even in clear weather: visibility only falls with
-    // age, so they can never be read again. Leaves gaps in seq.
-    void Prune(std::deque<Footprint>& a_trail, float a_nowHours, float a_minVisibility, const Config::TrailSettings& a_cfg);
+    // Drops only points below both the clear-weather visibility and scent thresholds.
+    // Leaves seq gaps, never joins scent segments.
+    void Prune(std::deque<Footprint>& a_trail, float a_nowHours, float a_minVisibility, const Config::TrailSettings& a_cfg,
+        const Config::ScentSettings& a_scent = {});
 
     // Over max_footprints: the older half keeps one footprint per thin_spacing (a change of space
     // always kept); whatever is still over the limit goes oldest first.

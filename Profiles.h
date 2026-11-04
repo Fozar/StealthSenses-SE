@@ -27,7 +27,4 @@ namespace StealthSenses::Profiles {
     // The profile of this NPC now (factions change, so it is not cached; a few dozen rules)
     Profile For(RE::Actor* a_actor);
 
-    // The most any profile multiplies a footprint's visibility by (tracking times blood, at least
-    // 1): footprints fainter than faint_visibility over this can never be read by anyone
-    float MaxBoost();
 }

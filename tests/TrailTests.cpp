@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "TrailLogic.h"
+#include "ProfileLogic.h"
 
 #include <doctest/doctest.h>
 
@@ -188,6 +189,29 @@ TEST_CASE("step: the default stride changes nothing; visibility scales with the 
     auto bloody = Make(1, 0, 0, RE::MATERIAL_ID::kStoneBroken, 0x3C, Trail::kBlood);
     bloody.step = 0.5f;
     CHECK(Trail::Visibility(bloody, 0, false, cfg) == doctest::Approx(cfg.hard_visibility * 0.5f + cfg.blood_visibility_bonus));
+}
+
+TEST_CASE("prune: stacked visual profile retains a footprint after scent expires") {
+    Config::TrailSettings cfg;
+    auto fp = Make(1, 0, 0, RE::MATERIAL_ID::kDirt, 0x3C, Trail::kBlood);
+    fp.scentSegment = 1;
+    Profiles::Patch base;
+    Profiles::Rule first, second;
+    first.patch.trackingMult = 2; first.patch.bloodMult = 2;
+    second.patch.trackingMult = 2; second.patch.bloodMult = 2;
+    const Profiles::Rule* matches[]{ &first, &second };
+    const auto profile = Profiles::Resolve(base, matches);
+    constexpr float threshold = 0.1f;
+    constexpr float now = 10.0f;
+    const auto visibility = Trail::Visibility(fp, now, false, cfg);
+    REQUIRE(visibility < threshold); // old setter-only bound was 1
+    REQUIRE(Profiles::Perceived(visibility, true, 0, 0.5f, profile) >= threshold);
+    std::deque<Footprint> trail{ fp };
+    Trail::Prune(trail, now, threshold / Profiles::MaxVisualBoost(), cfg);
+    CHECK(trail.size() == 1);
+    // With the old threshold the expired scent cannot retain it.
+    Trail::Prune(trail, now, threshold, cfg);
+    CHECK(trail.empty());
 }
 
 TEST_CASE("step: Sneak skill lowers it linearly down to skill_floor") {

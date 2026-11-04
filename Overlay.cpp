@@ -434,6 +434,7 @@ namespace StealthSenses::Overlay {
         s.space        = space;
         s.sampledAt    = std::chrono::steady_clock::now();
         s.scent        = Config::Get().scent;
+        const float scentWeather = Scent::WeatherFactor(cell && !cell->IsInteriorCell(), sky && sky->IsRaining(), sky && sky->IsSnowing(), s.scent);
         RE::Actor* reader = nullptr;
         if (auto ref = RE::Console::GetSelectedRef(); ref) reader = ref->As<RE::Actor>();
         if (!reader) {
@@ -447,15 +448,15 @@ namespace StealthSenses::Overlay {
             s.reader.push_back(std::format("Selected: {} [{:08X}]", reader->GetName(), reader->GetFormID()));
             s.reader.push_back(std::format("Visual {:.2f} | smell {:.2f} | blood smell x{:.2f} | calm hunt {}",
                 profile.tracking, profile.smell, profile.smellBlood, profile.smellHunt ? "YES" : "NO"));
-            const float regularR = Scent::Radius({s.scent.base_strength, s.scent.radius}, s.scent) * Scent::Reach(false, profile);
-            const float bloodR = Scent::Radius({s.scent.base_strength + s.scent.blood_bonus, s.scent.radius}, s.scent) * Scent::Reach(true, profile);
+            const float regularR = Scent::Radius({s.scent.base_strength * scentWeather, s.scent.radius}, s.scent) * Scent::Reach(false, profile);
+            const float bloodR = Scent::Radius({(s.scent.base_strength + s.scent.blood_bonus) * scentWeather, s.scent.radius}, s.scent) * Scent::Reach(true, profile);
             s.reader.push_back(std::format("Fresh open-space range: ordinary {:.0f} | blood {:.0f}", regularR, bloodR));
             const Trail::Footprint* best = nullptr;
             float strongest = 0, bestDist = 0;
             for (const auto& fp : Trail::Footprints()) {
                 if (fp.space != Trail::SpaceOf(reader) || std::abs(fp.pos.z - reader->GetPosition().z) > tracker.max_height_diff) continue;
                 const float dist = reader->GetPosition().GetDistance(fp.pos);
-                const float strength = Scent::Perceived(Scent::SampleAt(fp, now, s.scent), dist, fp.flags & Trail::kBlood, profile, s.scent);
+                const float strength = Scent::Perceived(Scent::SampleAt(fp, now, s.scent), dist, fp.flags & Trail::kBlood, profile, s.scent, scentWeather);
                 if (strength > strongest) { strongest = strength; best = &fp; bestDist = dist; }
             }
             s.reader.push_back(best ? std::format("Strongest potential #{} seg{} dist{:.0f} S{:.3f} {} (before barrier/motivation)",
@@ -494,7 +495,7 @@ namespace StealthSenses::Overlay {
                 dot.segment = fp.scentSegment;
                 dot.spreadRadius = sample.radius;
                 dot.scentRadius = Scent::Radius(sample, s.scent);
-                if (selectedProfile) dot.readerRadius = dot.scentRadius * Scent::Reach(fp.flags & Trail::kBlood, *selectedProfile);
+                if (selectedProfile) dot.readerRadius = Scent::Radius({sample.peak * scentWeather, sample.radius}, s.scent) * Scent::Reach(fp.flags & Trail::kBlood, *selectedProfile);
                 dot.scentLink = link && Scent::Connected(*prev, fp) && scent >= s.scent.min_strength &&
                     Scent::Strength(*prev, now, s.scent) >= s.scent.min_strength;
                 s.dots.push_back(dot);

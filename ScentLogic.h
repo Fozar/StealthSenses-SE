@@ -11,6 +11,14 @@
 #include <span>
 
 namespace StealthSenses::Scent {
+    inline float WeatherFactor(bool exterior, bool rain, bool snow, const Config::ScentSettings& cfg) {
+        return !exterior ? 1.0f : rain ? cfg.rain_mult : snow ? cfg.snow_mult : 1.0f;
+    }
+    inline float BodyFactor(bool torso, bool hands, bool feet, bool head, bool sprint, const Config::ScentSettings& cfg) {
+        const float covered = (torso ? cfg.body_torso_reduction : 0.0f) +
+            (static_cast<int>(hands) + static_cast<int>(feet) + static_cast<int>(head)) * cfg.body_limb_reduction;
+        return std::max(0.0f, 1.0f - covered) * (sprint ? cfg.body_sprint_mult : 1.0f);
+    }
     template <class Clear>
     const Trail::Footprint* FirstReachable(std::span<const Trail::Footprint* const> a_ordered, Clear a_clear, std::size_t a_budget) {
         for (const auto* fp : a_ordered) {
@@ -57,7 +65,7 @@ namespace StealthSenses::Scent {
             a_cfg.spread_max_mult < 1 || a_cfg.spread_max_mult > 2 || !std::isfinite(a_cfg.spread_hours) || a_cfg.spread_hours <= 0) {
             return {};
         }
-        const float base = a_cfg.base_strength + ((a_fp.flags & Trail::kBlood) ? a_cfg.blood_bonus : 0.0f);
+        const float base = a_cfg.base_strength * a_fp.scentBody + ((a_fp.flags & Trail::kBlood) ? a_cfg.blood_bonus : 0.0f);
         if (!std::isfinite(base) || base <= 0.0f) {
             return {};
         }
@@ -97,11 +105,11 @@ namespace StealthSenses::Scent {
         return std::isfinite(reach) ? std::clamp(reach, 0.0f, Profiles::kMaxSmell) : 0.0f;
     }
 
-    // Sensitivity extends range, not lifetime. No visual, darkness or weather modifiers.
+    // Sensitivity extends range, not lifetime. Weather affects perception only.
     inline float Perceived(const Sample& a_source, float a_distance, bool a_blood,
-        const Profiles::Profile& a_profile, const Config::ScentSettings& a_cfg) {
+        const Profiles::Profile& a_profile, const Config::ScentSettings& a_cfg, float a_weather = 1.0f) {
         const float reach = Reach(a_blood, a_profile);
-        return reach > 0 ? AtDistance(a_source, a_distance / reach, a_cfg) : 0.0f;
+        return reach > 0 ? AtDistance(a_source, a_distance / reach, a_cfg) * a_weather : 0.0f;
     }
 
     // Segment zero is only allowed as the reader's initial (not-yet-acquired) segment.

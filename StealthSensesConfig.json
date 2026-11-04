@@ -1,9 +1,14 @@
 {
     "scent": {
+        "rain_mult": 0.8,
+        "snow_mult": 0.85,
         "enabled": true,
         "halflife_hours": 0.5,
         "base_strength": 1.0,
         "blood_bonus": 1.0,
+        "body_torso_reduction": 0.2,
+        "body_limb_reduction": 0.03333333333333333,
+        "body_sprint_mult": 1.5,
         "radius": 450.0,
         "min_strength": 0.1,
         "spread_max_mult": 1.25,

@@ -7,6 +7,17 @@ const path = require('node:path');
 const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '../tools/replay.html'), 'utf8');
 
+test('scent notices use sampled weather and legacy defaults to one', () => {
+  const r = replay();
+  r.parse([
+    { type: 'npc', t: 1, id: 'A', name: 'wolf', pos: [0, 0, 0], meter: 0, pkg: 'P' },
+    { type: 'scent_notice', t: 1, id: 'A', reason: 'picked', picked: 1, perceived: 0.8, scentWeather: 0.8 },
+    { type: 'scent_notice', t: 2, id: 'A', reason: 'picked', picked: 1, perceived: 1 }
+  ]);
+  r.run('seek(1)'); assert.match(r.element('#npcs tbody').innerHTML, /погода ×0\.80/);
+  r.run('seek(2)'); assert.match(r.element('#npcs tbody').innerHTML, /погода ×1\.00/);
+});
+
 test('NPC scent diagnostics show channel, segment, profile and only past decisions', () => {
   const r = replay();
   r.parse([
@@ -72,6 +83,15 @@ function replay() {
     parse: records => vm.runInContext(`parse(${JSON.stringify(records.map(r => JSON.stringify(r)).join('\n'))})`, context)
   };
 }
+
+test('scent body snapshot and blood are independent, legacy base remains valid', () => {
+  const r = replay();
+  const cfg = `{v:2, enabled:true, base_strength:1, blood_bonus:1, halflife_hours:1, min_strength:0.1, radius:100, spread_max_mult:1, spread_hours:1}`;
+  const fp = `{t:0, segment:1, born:0, scentBase:2, blood:true}`;
+  assert.equal(r.run(`scentAt(${fp}, ${cfg}, 0, 0).strength`), 2);
+  assert.ok(Math.abs(r.run(`scentAt({...${fp}, scentBody:1.05}, ${cfg}, 0, 0).strength`) - 2.05) < 1e-6);
+  assert.equal(r.run(`scentAt({...${fp}, scentBody:-1}, ${cfg}, 0, 0)`), null);
+});
 
 const wind = (changes = {}) => ({
   type: 'wind', v: 1, t: 10, space: '0000003C', pos: [0, 0, 0], exterior: true,

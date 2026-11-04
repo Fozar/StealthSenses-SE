@@ -4,7 +4,7 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 
 **Nexus Mods:** https://www.nexusmods.com/skyrimspecialedition/mods/194163 · **Source:** https://github.com/Fozar/StealthSenses-SE
 
-> **Status: early access (0.12.0).** Visual tracking and wolf scent pursuit have been tested in game on AE 1.7.104. Expect tuning changes; there is no ESP. See `CHANGELOG.md`.
+> **Status: early access (0.13.0).** Expect tuning changes; there is no ESP. See `CHANGELOG.md`.
 
 ---
 
@@ -15,6 +15,7 @@ An SKSE plugin for **Skyrim Special Edition / Anniversary Edition** that turns y
 - **Different eyes** — not every enemy reads a trail equally well. Bosmer, hunters, the Forsworn, the Alik'r, the Thalmor, the Dark Brotherhood, the Silver Hand and the Dawnguard notice prints from farther away and make out fainter ones. Darkness hides your prints from most enemies, but not from Khajiit and vampires, and a vampire picks out a bloody print from afar. Falmer are blind to them. The profiles are a JSON file that you or other mods can extend.
 - **Alarming tracks** — a werewolf's or a vampire lord's prints, or bloody ones, alarm even a calm enemy who sees them.
 - **Scent** — selected creatures can investigate your scent trail, including on stone and in darkness. It gradually spreads and weakens with game time; blood strengthens it, and water breaks its chain. Khajiit and Argonians have stronger scent profiles than ordinary people; vampires have an additional advantage on blood. These profiles can be adjusted in JSON.
+- **Cover your scent** — clothing and armor reduce body scent; sprinting increases it. Rain and snow make scent harder to detect outdoors. Blood's added strength is not hidden by clothing.
 - **Bodies** — an enemy that finds the body of one of its own you killed goes to it and looks for your trail from there.
 - **Sharper senses** — a suspicious enemy (reading visible tracks, after a fight with you, or having found a body) spots you sooner: its stealth meter on you reads a few points higher. Scent pursuit alone adds no detection bonus.
 - **Vanilla AI stays in charge** — trackers walk with vanilla packages and pathfinding; one that spots you or fights you (or your followers) is handed back to the vanilla AI at once. A fight with someone else — a wolf on the road — only interrupts the chase.
@@ -25,8 +26,7 @@ The full description is on the [Nexus page](https://www.nexusmods.com/skyrimspec
 
 ## Requirements
 
-- Skyrim **Anniversary Edition 1.6.x and 1.7.x** — tested on 1.7.104; 1.6.x is expected to work but untested.
-- Skyrim Special Edition 1.5.97 — expected to work (Address Library based), **not tested**.
+- Skyrim **Anniversary Edition 1.6.x and 1.7.x**, or Special Edition **1.5.97**
 - [SKSE64](https://skse.silverlock.org/) matching your runtime
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
 
@@ -149,13 +149,22 @@ Outdoors, darkness follows the hour; indoors it is constant (torches are not tak
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `true` | Enable scent sources and scent pursuit |
+| `rain_mult` | `0.8` | Perceived scent multiplier during rain outdoors; includes blood |
+| `snow_mult` | `0.85` | Perceived scent multiplier during snow outdoors; includes blood |
 | `halflife_hours` | `0.5` | Game hours for scent quantity to halve; concentration also falls from dilution |
 | `base_strength` | `1.0` | Initial ordinary scent strength |
 | `blood_bonus` | `1.0` | Added strength for bloody sources |
+| `body_torso_reduction` | `0.2` | Body-scent reduction for a worn torso item |
+| `body_limb_reduction` | `0.0333333` | Additional reduction for each covered zone: hands, feet, head |
+| `body_sprint_mult` | `1.5` | Body-scent multiplier while sprinting |
 | `radius` | `450.0` | Initial reference scent range in game units, modified by NPC profiles |
 | `min_strength` | `0.1` | Minimum perceived scent strength |
 | `spread_max_mult` | `1.25` | Maximum expansion of the reference radius; 1 disables expansion |
 | `spread_hours` | `0.1` | Game hours for expansion to approach its limit (time constant) |
+
+Clothing and sprinting affect only body scent in newly left sources, not blood's added strength. Changing equipment does not alter old sources. There is no wetness or drying simulation.
+
+Rain and snow temporarily reduce perceived scent outdoors, without changing the sources or their aging. Indoors there is no weather penalty. If both precipitation flags are reported, the rain setting applies; they do not stack.
 
 ### Sense profiles — `StealthSensesProfiles.json`
 
@@ -226,7 +235,7 @@ The trace records your position, every nearby NPC's state and every decision the
 
 **Does it work with Footprints, Dynamic Footprints or Dynamic Terrain Deformation?** Yes, alongside them; it replaces nothing. Those mods draw prints you can see; Stealth Senses draws nothing and keeps its own invisible trail for the AI. The two are separate: a print you see is not necessarily one an enemy reads, and on stone, where you see none, a tracker can still make out a faint one up close.
 
-**Special Edition 1.5.97?** The same DLL supports SE 1.5.97 and AE through Address Library, so it should work; it is tested on AE 1.7.104 only. You need SKSE 2.0.20 and the SE version of Address Library. If you try it, please report how it went.
+**Special Edition 1.5.97?** The same DLL targets SE 1.5.97 and AE through Address Library. On SE 1.5.97, use SKSE 2.0.20 and the SE version of Address Library.
 
 ---
 

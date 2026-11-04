@@ -649,6 +649,7 @@ namespace StealthSenses::Trackers {
         const auto* cell       = player->GetParentCell();
         const bool  exterior   = cell && !cell->IsInteriorCell();
         const bool  badWeather = exterior && sky && (sky->IsRaining() || sky->IsSnowing());
+        const float scentWeather = Scent::WeatherFactor(exterior, sky && sky->IsRaining(), sky && sky->IsSnowing(), Config::Get().scent);
 
         // Once per loaded game: a ray from the player's eyes into the ground under its feet must be
         // blocked. If it is not, the ray setup sees no world geometry and the line-of-sight check
@@ -751,7 +752,7 @@ namespace StealthSenses::Trackers {
             Telemetry::Write({ { "type", "player" }, { "pos", Telemetry::Vec(player->GetPosition()) },
                 { "space", Telemetry::Hex(space) }, { "sneak", player->IsSneaking() },
                 { "run", player->IsRunning() }, { "combat", player->IsInCombat() },
-                { "weather", badWeather }, { "dark", darkness }, { "readable", clearCount }, { "faint", faintCount } });
+                { "weather", badWeather }, { "scentWeather", scentWeather }, { "dark", darkness }, { "readable", clearCount }, { "faint", faintCount } });
         }
 
         std::unordered_set<RE::FormID> seen;
@@ -878,7 +879,7 @@ namespace StealthSenses::Trackers {
                         const auto& c = *it;
                         const auto* fp = c.fp;
                         if (!Scent::Ahead(*fp, a_skip, a_segment) || OtherLevel(pos, fp->pos)) continue;
-                        const float strength = Scent::Perceived(c.scent, pos.GetDistance(fp->pos), fp->flags & Trail::kBlood, profile, sc);
+                        const float strength = Scent::Perceived(c.scent, pos.GetDistance(fp->pos), fp->flags & Trail::kBlood, profile, sc, scentWeather);
                         strongest = std::max(strongest, strength);
                         if (strength < sc.min_strength || strength <= 0) continue;
                         ++nearby;
@@ -897,14 +898,14 @@ namespace StealthSenses::Trackers {
                     }, kMaxSightRays);
                     if (best) {
                         pickedSource = Scent::SampleAt(*best, now, sc);
-                        pickedStrength = Scent::Perceived(pickedSource, pos.GetDistance(best->pos), best->flags & Trail::kBlood, profile, sc);
+                        pickedStrength = Scent::Perceived(pickedSource, pos.GetDistance(best->pos), best->flags & Trail::kBlood, profile, sc, scentWeather);
                     }
                 }
                 if (nearby || a_segment) {
                     Telemetry::Write({ { "type", "scent_notice" }, { "id", Telemetry::Hex(id) },
                         { "stage", a_pickup ? "pickup" : "continue" }, { "segment", a_segment },
                         { "near", nearby }, { "rays", rays }, { "blocked", blocked }, { "unknown", unknown },
-                        { "strongest", strongest }, { "perceived", pickedStrength }, { "source", pickedSource.peak },
+                        { "strongest", strongest }, { "perceived", pickedStrength }, { "source", pickedSource.peak }, { "scentWeather", scentWeather },
                         { "spreadRadius", pickedSource.radius },
                         { "picked", best ? best->seq : 0 }, { "pickedSegment", best ? best->scentSegment : 0 },
                         { "reason", best ? "picked" : !sc.enabled ? "disabled" : profile.smell <= 0 ? "no_sense" :
@@ -1260,11 +1261,14 @@ namespace StealthSenses::Trackers {
         const auto profile = Profiles::For(a_actor);
         const bool scent = Overlay::ScentOnly() || (profile.tracking <= 0 && profile.smell > 0);
         const auto* calendar = RE::Calendar::GetSingleton();
+        const auto* cell = a_actor->GetParentCell();
+        const auto* sky = RE::Sky::GetSingleton();
+        const float scentWeather = Scent::WeatherFactor(cell && !cell->IsInteriorCell(), sky && sky->IsRaining(), sky && sky->IsSnowing(), Config::Get().scent);
         std::vector<const Trail::Footprint*> nearby;
         for (const auto& fp : Trail::Footprints()) {
             if (scent && (!calendar ||
                 Scent::Perceived(Scent::SampleAt(fp, calendar->GetHoursPassed(), Config::Get().scent), pos.GetDistance(fp.pos),
-                    fp.flags & Trail::kBlood, profile, Config::Get().scent) < Config::Get().scent.min_strength ||
+                    fp.flags & Trail::kBlood, profile, Config::Get().scent, scentWeather) < Config::Get().scent.min_strength ||
                 fp.scentSegment == 0)) continue;
             if (fp.space == space && !OtherLevel(pos, fp.pos)) nearby.push_back(&fp);
         }

@@ -35,6 +35,7 @@ namespace StealthSenses::Trail {
         float            step     = 1.0f;  // how the player stepped (TrailLogic StepMult), 1 = as before 0.10
         std::uint32_t    seq     = 0;     // monotonically increasing along the trail
         std::uint32_t    scentSegment = 0; // 0: no scent (including legacy saves)
+        float            scentBody = 1.0f; // emission snapshot, independent of later clothing
     };
 
     // Space id of a reference: interior cell or worldspace FormID; 0 if not in the world.

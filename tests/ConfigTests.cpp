@@ -28,7 +28,7 @@ TEST_CASE("config: the shipped StealthSensesConfig.json matches the defaults in 
 
     // ...and has every key the parser knows, so players see all of them
     const auto root = nlohmann::json::parse(text, nullptr, true, true);
-    for (const char* key : { "enabled", "halflife_hours", "base_strength", "blood_bonus", "radius", "min_strength", "spread_max_mult", "spread_hours" }) {
+    for (const char* key : { "enabled", "halflife_hours", "base_strength", "blood_bonus", "radius", "min_strength", "spread_max_mult", "spread_hours", "rain_mult", "snow_mult" }) {
         CHECK_MESSAGE(root["scent"].contains(key), key);
     }
     for (const char* key : { "min_spacing", "max_footprints", "thin_spacing", "halflife_hours" }) {
@@ -82,6 +82,15 @@ TEST_CASE("config: scent values stay finite and usable, bad types keep defaults"
     CHECK(s.scent.min_strength == 0.001f);
     CHECK(s.scent.spread_max_mult == 1.0f);
     CHECK(s.scent.spread_hours == 0.001f);
+}
+
+TEST_CASE("config: body scent coefficients have safe ranges and type defaults") {
+    const auto s = Config::Parse(R"({"scent":{"body_torso_reduction":-1,"body_limb_reduction":2,"body_sprint_mult":9}})");
+    CHECK(s.scent.body_torso_reduction == 0);
+    CHECK(s.scent.body_limb_reduction == 1);
+    CHECK(s.scent.body_sprint_mult == 4);
+    const auto bad = Config::Parse(R"({"scent":{"body_torso_reduction":"bad","body_limb_reduction":false,"body_sprint_mult":null}})");
+    CHECK(bad.scent == Config::ScentSettings{});
 }
 
 TEST_CASE("config: values that would break the loops are clamped") {

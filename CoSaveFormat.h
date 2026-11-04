@@ -24,8 +24,8 @@
 // calls — WriteRecordData(const T&), ReadRecordData(T&) -> bytes read, ResolveFormID(old, new&).
 // The layouts are what players' saves hold: change one only with a new record version.
 namespace StealthSenses::CoSave {
-    // TRAL: v1 25 bytes, v2 29 bytes (+step), v3 33 bytes (+scent segment).
-    inline constexpr std::uint32_t kTrailVersion = 3;
+    // TRAL: v1 25 bytes, v2 29 (+step), v3 33 (+segment), v4 37 (+body factor).
+    inline constexpr std::uint32_t kTrailVersion = 4;
 
     #pragma pack(push, 1)
     struct SavedFootprint {
@@ -43,10 +43,15 @@ namespace StealthSenses::CoSave {
         SavedFootprintV2 v2;
         std::uint32_t scentSegment;
     };
+    struct SavedFootprintV4 {
+        SavedFootprintV3 v3;
+        float scentBody;
+    };
     #pragma pack(pop)
     static_assert(sizeof(SavedFootprint) == 25);
     static_assert(sizeof(SavedFootprintV2) == 29);
     static_assert(sizeof(SavedFootprintV3) == 33);
+    static_assert(sizeof(SavedFootprintV4) == 37);
 
     // TRKB v1: count, then {actor, marker, prevLinked}
     struct SavedBinding {
@@ -60,9 +65,9 @@ namespace StealthSenses::CoSave {
     void WriteTrail(const I& a_intfc, const std::deque<Trail::Footprint>& a_trail) {
         a_intfc.WriteRecordData(static_cast<std::uint32_t>(a_trail.size()));
         for (const auto& fp : a_trail) {
-            a_intfc.WriteRecordData(SavedFootprintV3{ { { fp.pos.x, fp.pos.y, fp.pos.z, fp.space, fp.gameHours,
+            a_intfc.WriteRecordData(SavedFootprintV4{ { { { fp.pos.x, fp.pos.y, fp.pos.z, fp.space, fp.gameHours,
                                                           static_cast<std::uint32_t>(fp.material), fp.flags },
-                fp.step }, fp.scentSegment });
+                fp.step }, fp.scentSegment }, fp.scentBody });
         }
     }
 
@@ -83,15 +88,16 @@ namespace StealthSenses::CoSave {
             return result;
         }
         for (std::uint32_t i = 0; i < count; ++i) {
-            SavedFootprintV3 read{ { {}, 1.0f }, 0 };
-            const bool whole = a_version == 3 ? a_intfc.ReadRecordData(read) == sizeof(read) :
-                               a_version == 2 ? a_intfc.ReadRecordData(read.v2) == sizeof(read.v2) :
-                                                a_intfc.ReadRecordData(read.v2.v1) == sizeof(read.v2.v1);
+            SavedFootprintV4 read{ { { {}, 1.0f }, 0 }, 1.0f };
+            const bool whole = a_version == 4 ? a_intfc.ReadRecordData(read) == sizeof(read) :
+                               a_version == 3 ? a_intfc.ReadRecordData(read.v3) == sizeof(read.v3) :
+                               a_version == 2 ? a_intfc.ReadRecordData(read.v3.v2) == sizeof(read.v3.v2) :
+                                                 a_intfc.ReadRecordData(read.v3.v2.v1) == sizeof(read.v3.v2.v1);
             if (!whole) {
                 SKSE::log::error("Serialization: truncated footprint {}/{}", i, count);
                 break;
             }
-            const auto& saved = read.v2.v1;
+            const auto& saved = read.v3.v2.v1;
             RE::FormID space = 0;
             if (!a_intfc.ResolveFormID(saved.space, space)) {
                 continue;
@@ -102,8 +108,9 @@ namespace StealthSenses::CoSave {
             fp.gameHours = saved.gameHours;
             fp.material  = static_cast<RE::MATERIAL_ID>(saved.material);
             fp.flags     = saved.flags;
-            fp.step      = std::isfinite(read.v2.step) && read.v2.step >= 0.0f ? read.v2.step : 1.0f;
-            fp.scentSegment = read.scentSegment; // v1/v2 stay visual-only: water history is unknown
+            fp.step      = std::isfinite(read.v3.v2.step) && read.v3.v2.step >= 0.0f ? read.v3.v2.step : 1.0f;
+            fp.scentSegment = read.v3.scentSegment;
+            fp.scentBody = std::isfinite(read.scentBody) && read.scentBody >= 0.0f ? read.scentBody : 1.0f;
             result.push_back(fp);
         }
         return result;

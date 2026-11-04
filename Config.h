@@ -29,10 +29,15 @@ inline constexpr bool kDevBuild = false;
 
 namespace StealthSenses::Config {
     struct ScentSettings {
+        float rain_mult = 0.8f;
+        float snow_mult = 0.85f;
         bool  enabled           = true;
         float halflife_hours    = 0.5f;
         float base_strength     = 1.0f;
         float blood_bonus       = 1.0f;
+        float body_torso_reduction = 0.2f;
+        float body_limb_reduction = 1.0f / 30.0f;
+        float body_sprint_mult = 1.5f;
         float radius            = 450.0f; // initial reference radius of the linear falloff
         float min_strength      = 0.1f;   // minimum perceived concentration
         float spread_max_mult   = 1.25f;  // bounded expansion of the source's reference radius

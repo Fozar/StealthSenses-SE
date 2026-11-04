@@ -61,6 +61,7 @@ TEST_CASE("trail record: round trip keeps every saved field") {
     trail[1].step = 0.42f;
     trail[0].scentSegment = 7;
     trail[1].scentSegment = 9;
+    trail[1].scentBody = 1.05f;
     FakeCoSave co;
     CoSave::WriteTrail(co, trail);
     const auto read = CoSave::ReadTrail(co);
@@ -74,18 +75,19 @@ TEST_CASE("trail record: round trip keeps every saved field") {
         CHECK(read[i].flags == trail[i].flags);
         CHECK(read[i].step == trail[i].step);
         CHECK(read[i].scentSegment == trail[i].scentSegment);
+        CHECK(read[i].scentBody == trail[i].scentBody);
     }
 }
 
 TEST_CASE("trail record: the on-disk layout does not change") {
-    // v3 keeps the v2 prefix and appends the scent segment u32 (33 bytes per point).
-    CHECK(CoSave::kTrailVersion == 3);
+    // v4 appends the body snapshot to the v3 prefix.
+    CHECK(CoSave::kTrailVersion == 4);
     FakeCoSave co;
     auto       fp = Footprint(1.0f, 0x3C, 2.0f, RE::MATERIAL_ID::kDirt, Trail::kBlood);
     fp.step       = 0.75f;
     fp.scentSegment = 17;
     CoSave::WriteTrail(co, { fp });
-    REQUIRE(co.bytes.size() == 4 + 33);
+    REQUIRE(co.bytes.size() == 4 + 37);
     std::uint32_t count, space, material, segment;
     float         x, hours, step;
     std::memcpy(&count, co.bytes.data(), 4);
@@ -118,6 +120,7 @@ TEST_CASE("trail record: v1 from saves before 0.10 reads with step 1") {
     CHECK(read[0].step == 1.0f);
     CHECK(read[1].gameHours == 8.0f);
     CHECK(read[1].step == 1.0f);
+    CHECK(read[0].scentBody == 1.0f);
 }
 
 TEST_CASE("trail record: a broken step reads as 1") {
@@ -128,6 +131,26 @@ TEST_CASE("trail record: a broken step reads as 1") {
     REQUIRE(read.size() == 1);
     CHECK(read[0].step == 1.0f);
     CHECK(read[0].scentSegment == 0);
+    CHECK(read[0].scentBody == 1.0f);
+}
+
+TEST_CASE("trail record: v3 defaults body and v4 rejects malformed body snapshots") {
+    FakeCoSave legacy;
+    legacy.WriteRecordData(std::uint32_t{1});
+    legacy.WriteRecordData(CoSave::SavedFootprintV3{{{1, 2, 3, 0x3C, 4, 0, 0}, 0.5f}, 17});
+    const auto old = CoSave::ReadTrail(legacy, 3);
+    REQUIRE(old.size() == 1);
+    CHECK(old[0].scentSegment == 17);
+    CHECK(old[0].scentBody == 1);
+    for (float bad : { -1.0f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() }) {
+        FakeCoSave co;
+        auto fp = Footprint(1, 0x3C, 4, RE::MATERIAL_ID::kDirt, 0);
+        fp.scentBody = bad;
+        CoSave::WriteTrail(co, {fp});
+        const auto read = CoSave::ReadTrail(co);
+        REQUIRE(read.size() == 1);
+        CHECK(read[0].scentBody == 1);
+    }
 }
 
 TEST_CASE("trail record: v2 keeps stride without inventing legacy scent or water continuity") {
@@ -139,6 +162,7 @@ TEST_CASE("trail record: v2 keeps stride without inventing legacy scent or water
     CHECK(read[0].step == doctest::Approx(0.42f));
     CHECK(read[0].flags == Trail::kBlood);
     CHECK(read[0].scentSegment == 0);
+    CHECK(read[0].scentBody == 1.0f);
 }
 
 TEST_CASE("trail record: unknown future layout is not silently read as an older format") {
@@ -175,6 +199,10 @@ TEST_CASE("trail record: a truncated record gives what was read") {
 
     FakeCoSave empty;
     CHECK(CoSave::ReadTrail(empty).empty());
+    FakeCoSave bodyCut;
+    CoSave::WriteTrail(bodyCut, { Footprint(1, 0x3C, 0, RE::MATERIAL_ID::kDirt, 0) });
+    bodyCut.bytes.pop_back();
+    CHECK(CoSave::ReadTrail(bodyCut).empty());
 }
 
 TEST_CASE("binding record: round trip, unresolved actor dropped, unresolved marker zeroed") {

@@ -79,6 +79,18 @@ namespace StealthSenses::Trail {
             return armor && armor->IsHeavyArmor();
         }
 
+        float ReadScentBody(RE::PlayerCharacter* player) {
+            if (!player) return 1.0f;
+            using Slot = RE::BGSBipedObjectForm::BipedObjectSlot;
+            const auto* state = player->AsActorState();
+            // Armor in head/hair/long-hair slots includes hoods; a circlet alone is not coverage.
+            return Scent::BodyFactor(player->GetWornArmor(Slot::kBody) != nullptr,
+                player->GetWornArmor(Slot::kHands) != nullptr, player->GetWornArmor(Slot::kFeet) != nullptr,
+                player->GetWornArmor(Slot::kHead) != nullptr || player->GetWornArmor(Slot::kHair) != nullptr ||
+                    player->GetWornArmor(Slot::kLongHair) != nullptr,
+                state && state->IsSprinting(), Config::Get().scent);
+        }
+
         Stride ReadStride(RE::PlayerCharacter* a_player, RE::MATERIAL_ID a_material, bool a_interior) {
             Stride s;
             if (const auto* av = a_player->AsActorValueOwner()) {
@@ -283,6 +295,7 @@ namespace StealthSenses::Trail {
         const auto* cell   = a_player->GetParentCell();
         const auto  stride = ReadStride(a_player, material, cell && cell->IsInteriorCell());
         fp.step            = StepMult(stride, Config::Get().step);
+        fp.scentBody       = ReadScentBody(a_player);
         if (g_bloodSteps > 0) {
             fp.flags |= kBlood;
             --g_bloodSteps;
@@ -305,7 +318,7 @@ namespace StealthSenses::Trail {
             { "base", Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & kBlood) != 0 },
             { "beast", (fp.flags & kBeast) != 0 }, { "vlord", (fp.flags & kVampireLord) != 0 },
             { "src", a_source }, { "step", fp.step },
-            { "born", fp.gameHours }, { "segment", fp.scentSegment },
+            { "born", fp.gameHours }, { "segment", fp.scentSegment }, { "scentBody", fp.scentBody },
             { "scentBase", Scent::Strength(fp, fp.gameHours, Config::Get().scent) },
             { "scent", Telemetry::ScentModel() },
             { "stride", { { "skill", stride.sneakSkill }, { "gait", GaitName(stride.gait) },
@@ -382,6 +395,7 @@ namespace StealthSenses::Trail {
         fp.gameHours = calendar->GetHoursPassed();
         fp.material  = a_material;
         fp.seq       = g_nextSeq++;
+        fp.scentBody = ReadScentBody(RE::PlayerCharacter::GetSingleton());
         StampScent(fp);
         g_trail.push_back(fp);
         const auto& cfg = Config::Get().trail;
@@ -391,7 +405,7 @@ namespace StealthSenses::Trail {
         Telemetry::Write({ { "type", "footprint" }, { "seq", fp.seq }, { "pos", Telemetry::Vec(a_pos) },
             { "space", Telemetry::Hex(a_space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(a_material)) },
             { "base", Visibility(fp, fp.gameHours, false) }, { "blood", false }, { "src", a_source },
-            { "born", fp.gameHours }, { "segment", fp.scentSegment },
+            { "born", fp.gameHours }, { "segment", fp.scentSegment }, { "scentBody", fp.scentBody },
             { "scentBase", Scent::Strength(fp, fp.gameHours, Config::Get().scent) },
             { "scent", Telemetry::ScentModel() } });
     }

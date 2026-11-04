@@ -29,7 +29,6 @@ namespace StealthSenses::Profiles {
 
         RuleSet               g_set;
         std::vector<Resolved> g_rules;
-        float                 g_maxBoost = 1.0f;
 
         bool Matches(RE::Actor* a_actor, const Resolved& a_r) {
             switch (a_r.rule->layer) {
@@ -121,8 +120,6 @@ namespace StealthSenses::Profiles {
         // Rules naming a plugin that is not loaded (a DLC, a mod) are expected: skipped quietly
         auto*       data       = RE::TESDataHandler::GetSingleton();
         std::size_t unresolved = 0;
-        float       maxTracking = 1.0f;
-        float       maxBlood    = 1.0f;
         for (const auto& rule : g_set.rules) {
             const auto ref = Config::ParseFormRef(rule.form);
             if (!ref) {
@@ -143,14 +140,9 @@ namespace StealthSenses::Profiles {
                 continue;
             }
             g_rules.push_back({ &rule, form });
-            maxTracking = std::max(maxTracking, rule.patch.tracking.value_or(0.0f));
-            maxBlood    = std::max(maxBlood, rule.patch.blood.value_or(0.0f));
         }
-        maxTracking = std::max(maxTracking, g_set.base.tracking.value_or(1.0f));
-        maxBlood    = std::max(maxBlood, g_set.base.blood.value_or(1.0f));
-        g_maxBoost  = maxTracking * maxBlood;
-        SKSE::log::info("Profiles: {} rules in use, {} not resolved; most a profile boosts a footprint: x{:.2f}",
-            g_rules.size(), unresolved, g_maxBoost);
+        SKSE::log::info("Profiles: {} rules in use, {} not resolved; visual boost upper bound: x{:.2f}",
+            g_rules.size(), unresolved, MaxVisualBoost());
     }
 
     Profile For(RE::Actor* a_actor) {
@@ -165,7 +157,4 @@ namespace StealthSenses::Profiles {
         return Resolve(g_set.base, matched);
     }
 
-    float MaxBoost() {
-        return g_maxBoost;
-    }
 }

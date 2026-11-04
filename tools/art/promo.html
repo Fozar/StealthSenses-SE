@@ -395,8 +395,8 @@ if (MODE === 'scent') {
     <div class="sub">Stone hides footprints. A keen nose can still follow.</div>`;
   const PANELS = [
     ['I', 'A nose for your trail', 'Wolves and other scent trackers follow where you walked, even on stone and after dark. Each creature has its own sense of smell.', drawScent],
-    ['II', 'Blood tells', 'Blood strengthens your scent for every creature that can smell it. Vampires have an extra advantage when the trail is bloody.', drawBloodScent],
-    ['III', 'Time and water', 'Scent spreads locally as it weakens. Old sources fade beyond perception, and water breaks the chain.', drawScentFade],
+    ['II', 'Clothing and blood', 'Clothing reduces body scent. Sprinting makes it stronger. Blood adds its own scent, untouched by clothing.', drawBloodScent],
+    ['III', 'Weather and time', 'Rain and snow hinder scent detection outdoors. Sources spread and fade with time. Water breaks the chain.', drawScentFade],
   ];
   content.innerHTML = `<div class="panels wide">${PANELS.map(([k, t, p]) =>
     `<div class="panel"><svg width="540" height="342" viewBox="0 0 410 260"></svg>

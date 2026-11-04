@@ -88,10 +88,15 @@ namespace StealthSenses::Config {
 
         auto& smell = settings.scent;
         const auto& jm = Section(root, "scent");
+        if (jm.contains("rain_mult") && jm["rain_mult"].is_number()) Read(jm, "rain_mult", smell.rain_mult);
+        if (jm.contains("snow_mult") && jm["snow_mult"].is_number()) Read(jm, "snow_mult", smell.snow_mult);
         Read(jm, "enabled", smell.enabled);
         Read(jm, "halflife_hours", smell.halflife_hours);
         Read(jm, "base_strength", smell.base_strength);
         Read(jm, "blood_bonus", smell.blood_bonus);
+        if (jm.contains("body_torso_reduction") && jm["body_torso_reduction"].is_number()) Read(jm, "body_torso_reduction", smell.body_torso_reduction);
+        if (jm.contains("body_limb_reduction") && jm["body_limb_reduction"].is_number()) Read(jm, "body_limb_reduction", smell.body_limb_reduction);
+        if (jm.contains("body_sprint_mult") && jm["body_sprint_mult"].is_number()) Read(jm, "body_sprint_mult", smell.body_sprint_mult);
         Read(jm, "radius", smell.radius);
         Read(jm, "min_strength", smell.min_strength);
         Read(jm, "spread_max_mult", smell.spread_max_mult);
@@ -100,9 +105,14 @@ namespace StealthSenses::Config {
         const auto bound = [](float value, float fallback, float lo, float hi) {
             return std::isfinite(value) ? std::clamp(value, lo, hi) : fallback;
         };
+        smell.rain_mult = bound(smell.rain_mult, scentDefaults.rain_mult, 0.0f, 1.0f);
+        smell.snow_mult = bound(smell.snow_mult, scentDefaults.snow_mult, 0.0f, 1.0f);
         smell.halflife_hours = bound(smell.halflife_hours, scentDefaults.halflife_hours, 0.01f, 24.0f);
         smell.base_strength = bound(smell.base_strength, scentDefaults.base_strength, 0.0f, 4.0f);
         smell.blood_bonus = bound(smell.blood_bonus, scentDefaults.blood_bonus, 0.0f, 4.0f);
+        smell.body_torso_reduction = bound(smell.body_torso_reduction, scentDefaults.body_torso_reduction, 0.0f, 1.0f);
+        smell.body_limb_reduction = bound(smell.body_limb_reduction, scentDefaults.body_limb_reduction, 0.0f, 1.0f);
+        smell.body_sprint_mult = bound(smell.body_sprint_mult, scentDefaults.body_sprint_mult, 0.0f, 4.0f);
         smell.radius = bound(smell.radius, scentDefaults.radius, 16.0f, 4000.0f);
         smell.min_strength = bound(smell.min_strength, scentDefaults.min_strength, 0.001f, 4.0f);
         smell.spread_max_mult = bound(smell.spread_max_mult, scentDefaults.spread_max_mult, 1.0f, 2.0f);

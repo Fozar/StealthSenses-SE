@@ -242,7 +242,7 @@ namespace {
             const auto start = std::chrono::steady_clock::now();
             // Lifetime is a trail concern, including when NPC tracking is disabled.
             if (const auto* calendar = RE::Calendar::GetSingleton()) {
-                Trail::Prune(calendar->GetHoursPassed(), Config::Get().tracker.faint_visibility / Profiles::MaxBoost());
+                Trail::Prune(calendar->GetHoursPassed(), Config::Get().tracker.faint_visibility / Profiles::MaxVisualBoost());
             }
             Trackers::Update(backlog);
             Overlay::Publish();
@@ -320,7 +320,8 @@ namespace {
                 { "space", Telemetry::Hex(fp.space) }, { "mat", Telemetry::Hex(static_cast<std::uint32_t>(fp.material)) },
                 { "base", Trail::Visibility(fp, fp.gameHours, false) }, { "blood", (fp.flags & Trail::kBlood) != 0 },
                 { "src", "save" }, { "step", fp.step }, { "born", fp.gameHours }, { "segment", fp.scentSegment },
-                { "scentBase", fp.scentSegment ? scent.base_strength + ((fp.flags & Trail::kBlood) ? scent.blood_bonus : 0.0f) : 0.0f },
+                { "scentBody", fp.scentBody },
+                { "scentBase", fp.scentSegment ? scent.base_strength * fp.scentBody + ((fp.flags & Trail::kBlood) ? scent.blood_bonus : 0.0f) : 0.0f },
                 { "scent", Telemetry::ScentModel() } });
         }
         Trail::BreakScent("load");

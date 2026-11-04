@@ -5,7 +5,7 @@
 
 No .esp. No scripts. No edited records. Vanilla AI does the walking — the plugin only tells it where to look next, and lets a wary enemy see a little sharper.[/font]
 
-[font=Tahoma][b]Early access (0.12).[/b] Visual tracking and wolf scent pursuit have been tested in game on AE 1.7.104. Expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
+[font=Tahoma][b]Early access (0.13).[/b] Expect tuning changes. Bug reports with telemetry are very welcome (see below).[/font]
 
 [font=Tahoma][size=4][b]— Your trail —[/b][/size][/font]
 
@@ -43,6 +43,10 @@ Who reads how well is set in [font=Courier New]StealthSensesProfiles.json[/font]
 
 [b]Scent gradually spreads and weakens[/b] with game time. Water breaks the chain. [b]Blood strengthens the source for every creature that can smell it[/b], and vampires have an additional advantage on blood.
 
+[b]Clothing and armor help contain body scent.[/b] Covering your torso matters most; gloves, boots and a helmet or hood help a little more. [b]Sprinting makes body scent stronger.[/b] Each source keeps the effect from when you left it — changing clothes does not hide your old trail. Blood's added strength is not hidden by clothing.
+
+[b]Rain and snow make scent harder to detect outdoors[/b] — rain by 20%, snow by 15%. This is a temporary effect on perception, not permanent washing away of the trail; indoors there is no weather penalty.
+
 Each creature has its own scent sensitivity. Ordinary people have only a small scent influence; Khajiit and Argonians have stronger profiles. A strong nose does not automatically make a calm creature hunt you. Automatons, ordinary undead, atronachs and gargoyles have no scent sense; vampires and death hounds are explicit exceptions. These profiles are adjustable in [font=Courier New]StealthSensesProfiles.json[/font].
 
 Your scent trail is saved with its original age. [b]Following scent alone adds no bonus to the stealth meter.[/b][/font]
@@ -70,8 +74,7 @@ Your scent trail is saved with its original age. [b]Following scent alone adds n
 [font=Tahoma][size=4][b]— Requirements —[/b][/size][/font]
 
 [font=Tahoma][list]
-[*]Skyrim [b]Anniversary Edition 1.6.x and 1.7.x[/b] — tested on 1.7.104; 1.6.x should work but is untested
-[*]Skyrim Special Edition 1.5.97 — expected to work, [b]not tested[/b]
+[*]Skyrim [b]Anniversary Edition 1.6.x and 1.7.x[/b], or [b]Special Edition 1.5.97[/b]
 [*][url=https://skse.silverlock.org/]SKSE64[/url] matching your game version
 [*][url=https://www.nexusmods.com/skyrimspecialedition/mods/32444]Address Library for SKSE Plugins[/url]
 [/list]
@@ -85,7 +88,7 @@ Skyrim VR is not supported.[/font]
 
 [font=Tahoma][size=4][b]— Configuration —[/b][/size][/font]
 
-[font=Tahoma]Everything is tunable in [font=Courier New]Data\SKSE\Plugins\StealthSensesConfig.json[/font]: how fast prints fade, how visible each surface is, how much your skill, gait, armor and race change your step, how close and how wide an NPC looks, how suspicious it must be, how long it searches, whether trackers draw weapons. Every key is optional; the full list with explanations is in the [url=https://github.com/Fozar/StealthSenses-SE#configuration]README on GitHub[/url].[/font]
+[font=Tahoma]Everything is tunable in [font=Courier New]Data\SKSE\Plugins\StealthSensesConfig.json[/font]: how fast prints fade, how visible each surface is, how much your skill, gait, armor and race change your step, how clothing, sprinting and weather affect scent, how close and how wide an NPC looks, how suspicious it must be, how long it searches, whether trackers draw weapons. Every key is optional; the full list with explanations is in the [url=https://github.com/Fozar/StealthSenses-SE#configuration]README on GitHub[/url].[/font]
 
 [font=Tahoma][size=4][b]— Compatibility —[/b][/size][/font]
 

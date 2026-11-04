@@ -160,6 +160,17 @@ TEST_CASE("profiles: layers apply keyword < race < class < faction < npc, then f
     CHECK(Profiles::Resolve(set.base, {}).name == "default");
 }
 
+TEST_CASE("profiles: visual retention bound covers stacked tracking and blood multipliers") {
+    const auto set = ParseOne(R"({"default":{"tracking":1,"blood":1},"rules":[
+        {"keyword":"A|1","name":"keen","tracking_mult":2,"blood_mult":2},
+        {"faction":"A|2","name":"hunter","tracking_mult":2,"blood_mult":2}]})");
+    const Profiles::Rule* matches[]{ &set.rules[0], &set.rules[1] };
+    const auto profile = Profiles::Resolve(set.base, matches);
+    CHECK(profile.tracking == Profiles::kMaxTracking);
+    CHECK(profile.blood == 4.0f);
+    CHECK(Profiles::Perceived(1.0f, true, 0.0f, 0.5f, profile) <= Profiles::MaxVisualBoost());
+}
+
 TEST_CASE("profiles: later files override the default and add rules after") {
     Profiles::RuleSet        set;
     std::vector<std::string> warnings;

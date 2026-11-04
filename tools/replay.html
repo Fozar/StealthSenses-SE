@@ -192,9 +192,11 @@ function windAt(samples, t, space) {
 }
 
 function scentAt(fp, cfg, gameHours, time, removedAt = Infinity) {
+  const factor = fp.scentBody ?? 1;
+  const base = fp.scentBody === undefined ? fp.scentBase : cfg?.base_strength * factor + (fp.blood ? cfg?.blood_bonus : 0);
   if (!cfg || ![1, 2].includes(cfg.v) || !cfg.enabled || fp.t > time || removedAt <= time ||
       !Number.isFinite(fp.segment) || fp.segment <= 0 || !Number.isFinite(fp.born) ||
-      !Number.isFinite(gameHours) || !Number.isFinite(fp.scentBase) || fp.scentBase < 0 ||
+      !Number.isFinite(gameHours) || !Number.isFinite(factor) || factor < 0 || !Number.isFinite(base) || base < 0 ||
       !Number.isFinite(cfg.halflife_hours) || cfg.halflife_hours <= 0 ||
       !Number.isFinite(cfg.min_strength) || cfg.min_strength <= 0 || !Number.isFinite(cfg.radius) || cfg.radius <= 0) return null;
   const age = Math.max(gameHours - fp.born, 0);
@@ -204,7 +206,7 @@ function scentAt(fp, cfg, gameHours, time, removedAt = Infinity) {
         !Number.isFinite(cfg.spread_hours) || cfg.spread_hours <= 0) return null;
     growth += (cfg.spread_max_mult - 1) * -Math.expm1(-age / cfg.spread_hours);
   }
-  const strength = fp.scentBase * 2 ** (-age / cfg.halflife_hours) / (growth * growth);
+  const strength = base * 2 ** (-age / cfg.halflife_hours) / (growth * growth);
   const spreadRadius = cfg.radius * growth;
   const radius = strength > cfg.min_strength ? spreadRadius * (1 - cfg.min_strength / strength) : 0;
   return { fp, age, strength, radius, spreadRadius, active: strength >= cfg.min_strength };
@@ -389,7 +391,7 @@ function render() {
     const notice = at(S.scentNotices.get(id) || [], T);
     const reason = { picked: 'доступен источник', barrier_or_budget: 'преграда / предел лучей', calm: 'спокоен',
       no_local_source: 'нет доступного источника', disabled: 'выключено', no_sense: 'нет нюха' };
-    const decision = notice && T - notice.t <= 3 ? `<div class="muted">запах: ${esc(reason[notice.reason] || notice.reason)}${notice.picked ? ' #' + notice.picked + ' · S' + Number(notice.perceived).toFixed(3) : ''}</div>` : '';
+    const decision = notice && T - notice.t <= 3 ? `<div class="muted">запах: ${esc(reason[notice.reason] || notice.reason)}${notice.picked ? ' #' + notice.picked + ' · S' + Number(notice.perceived).toFixed(3) : ''} · погода ×${Number.isFinite(notice.scentWeather) ? notice.scentWeather.toFixed(2) : '1.00'}</div>` : '';
     rows.push(`<tr><td><span class="swatch" style="background:${n.color}"></span></td><td>${esc(n.name)}<div class="muted">${id}${cur.combat ? ' · бой' : ''}${cur.alert ? ' · тревога' : ''}${cur.weapon ? ' · оружие' : ''}${cur.sitsleep > 0 ? ' · sit/sleep ' + cur.sitsleep : ''}${cur.afterFight ? ' · после боя' : ''}${cur.foundBody ? ' · нашёл тело' : ''}</div>${profile}</td><td title="${esc(meterInfo(cur))}">${cur.meter}${cur.bonus ? ' <span class="muted">+' + cur.bonus + '</span>' : ''}</td><td>${cur.track ? esc(mode) + ' #' + cur.track.seq + (cur.track.hops ? ' · точка ' + cur.track.hops : '') : '—'}${decision}</td><td class="muted">${cur.pkg}</td></tr>`);
   }
   document.querySelector('#npcs tbody').innerHTML = rows.join('') || '<tr><td colspan="5" class="muted">нет</td></tr>';

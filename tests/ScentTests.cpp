@@ -2,8 +2,51 @@
 #include "ScentLogic.h"
 #include "ProfileLogic.h"
 #include <doctest/doctest.h>
-
 using namespace StealthSenses;
+
+TEST_CASE("weather affects perception, not body and blood sources") {
+    const Config::ScentSettings cfg;
+    CHECK(Scent::WeatherFactor(false, true, true, cfg) == 1);
+    CHECK(Scent::WeatherFactor(true, false, false, cfg) == 1);
+    CHECK(Scent::WeatherFactor(true, true, false, cfg) == doctest::Approx(0.8));
+    CHECK(Scent::WeatherFactor(true, false, true, cfg) == doctest::Approx(0.85));
+    CHECK(Scent::WeatherFactor(true, true, true, cfg) == doctest::Approx(0.8));
+    Trail::Footprint fp{}; fp.scentSegment = 1; fp.scentBody = 0.5f; fp.flags = Trail::kBlood;
+    const auto source = Scent::SampleAt(fp, 0, cfg);
+    Profiles::Profile profile; profile.smell = 1;
+    CHECK(Scent::Perceived(source, 0, true, profile, cfg, 0.8f) == doctest::Approx(source.peak * 0.8f));
+    CHECK(Scent::SampleAt(fp, 0, cfg).peak == source.peak);
+    CHECK(fp.scentBody == 0.5f);
+}
+
+TEST_CASE("scent weather config defaults types and bounds") {
+    const auto defaults = Config::Parse("{}").scent;
+    CHECK(defaults.rain_mult == doctest::Approx(0.8));
+    CHECK(defaults.snow_mult == doctest::Approx(0.85));
+    const auto bad = Config::Parse(R"({"scent":{"rain_mult":true,"snow_mult":"bad"}})").scent;
+    CHECK(bad.rain_mult == defaults.rain_mult);
+    CHECK(bad.snow_mult == defaults.snow_mult);
+    const auto bounded = Config::Parse(R"({"scent":{"rain_mult":-1,"snow_mult":2}})").scent;
+    CHECK(bounded.rain_mult == 0);
+    CHECK(bounded.snow_mult == 1);
+}
+
+TEST_CASE("body scent is a clothing and sprint snapshot; blood remains independent") {
+    Config::ScentSettings cfg;
+    CHECK(Scent::BodyFactor(false, false, false, false, false, cfg) == doctest::Approx(1));
+    CHECK(Scent::BodyFactor(true, true, true, true, false, cfg) == doctest::Approx(0.7));
+    CHECK(Scent::BodyFactor(false, false, false, false, true, cfg) == doctest::Approx(1.5));
+    Trail::Footprint fp;
+    fp.scentSegment = 1;
+    fp.scentBody = Scent::BodyFactor(true, true, true, true, true, cfg);
+    CHECK(fp.scentBody == doctest::Approx(1.05));
+    fp.flags = Trail::kBlood;
+    CHECK(Scent::Strength(fp, 0, cfg) == doctest::Approx(2.05));
+    cfg.body_torso_reduction = 0;
+    CHECK(Scent::Strength(fp, 0, cfg) == doctest::Approx(2.05));
+    cfg.base_strength = 2;
+    CHECK(Scent::Strength(fp, 0, cfg) == doctest::Approx(3.1));
+}
 
 TEST_CASE("scent reader: a blocked nearest source does not hide a clear candidate within the ray budget") {
     Trail::Footprint blocked, clear;

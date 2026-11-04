@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0 — 2026-11-04
+
+- **Weather and scent** — rain reduces perceived scent by 20% and snow by 15%, outdoors only. The effect ends with the weather; it does not permanently weaken saved sources.
+- **Scent and clothing** — worn clothing or armor reduces body scent; sprinting increases it. Each new source keeps the effect from when it was left. Blood's added scent is unchanged.
+- **Fix** — aging footprints remain available to strong visual trackers whose profile bonuses come from multiple matching rules.
+- **Save data** — new scent sources preserve their body-scent modifier; saves from earlier versions remain readable.
+
 ## 0.12.0 — 2026-10-26
 
 - **Scent trails** — wolves and other scent trackers can follow where you walked, including over stone and in darkness. Scent gradually spreads and weakens, blood strengthens it, and water breaks its chain. Scent pursuit alone adds no detection bonus.

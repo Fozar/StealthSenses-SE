@@ -37,6 +37,9 @@ namespace StealthSenses::Profiles {
     inline constexpr float kMaxBlood    = 5.0f;
     inline constexpr float kMaxSmell    = 4.0f;
 
+    // Resolve clamps each factor even when arbitrarily many rules multiply it.
+    inline constexpr float MaxVisualBoost() { return kMaxTracking * kMaxBlood; }
+
     // What a rule matches on, least specific first: a later layer overrides an earlier one
     enum class Layer : std::uint8_t { kKeyword, kRace, kClass, kFaction, kNpc };
 
